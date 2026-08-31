@@ -1,204 +1,807 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Painel de Preços para Licitações</title>
-  <style>
-    :root {
-      --cor-primaria: #1a73e8;
-      --cor-fundo: #f5f7fa;
-      --cor-card: #ffffff;
-      --cor-texto: #1f2937;
-      --cor-borda: #e5e7eb;
-      --cor-ok: #16a34a;
-      --cor-alerta: #d97706;
-      --cor-erro: #dc2626;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--cor-fundo);
-      color: var(--cor-texto);
-      line-height: 1.6;
-      padding: 24px;
-    }
-    .container { max-width: 960px; margin: 0 auto; }
-    header {
-      background: linear-gradient(135deg, #1a73e8, #0b4ea2);
-      color: #fff;
-      border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 24px;
-    }
-    header h1 { font-size: 1.6rem; }
-    header p { opacity: 0.9; font-size: 0.9rem; margin-top: 6px; }
-    .card {
-      background: var(--cor-card);
-      border: 1px solid var(--cor-borda);
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-    }
-    label { font-weight: 600; display: block; margin-bottom: 6px; }
-    textarea {
-      width: 100%;
-      min-height: 120px;
-      border: 1px solid var(--cor-borda);
-      border-radius: 8px;
-      padding: 12px;
-      font-family: ui-monospace, monospace;
-      font-size: 0.9rem;
-      resize: vertical;
-    }
-    .hint { font-size: 0.8rem; color: #6b7280; margin-top: 6px; }
-    button {
-      background: var(--cor-primaria);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 10px 20px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      cursor: pointer;
-      margin-top: 12px;
-    }
-    button:hover { filter: brightness(1.08); }
-    .resultado {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
-      margin-top: 16px;
-    }
-    .metrica {
-      background: var(--cor-fundo);
-      border-radius: 8px;
-      padding: 14px;
-      text-align: center;
-    }
-    .metrica .rotulo { font-size: 0.78rem; color: #6b7280; text-transform: uppercase; }
-    .metrica .valor { font-size: 1.3rem; font-weight: 700; margin-top: 4px; }
-    .metrica.destaque { background: #eaf3ff; border: 1px solid #cfe3ff; }
-    .aviso {
-      margin-top: 14px;
-      padding: 12px;
-      border-radius: 8px;
-      font-size: 0.9rem;
-    }
-    .aviso.alerta { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; }
-    .aviso.erro { background: #fee2e2; border: 1px solid #fecaca; color: #991b1b; }
-    .lista-amostras { margin-top: 16px; }
-    .lista-amostras table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    .lista-amostras th, .lista-amostras td {
-      border: 1px solid var(--cor-borda);
-      padding: 6px 10px;
-      text-align: left;
-    }
-    .lista-amostras th { background: var(--cor-fundo); }
-    .outlier { background: #fee2e2; }
-    .ausente { font-style: italic; color: #6b7280; }
-    footer { font-size: 0.8rem; color: #6b7280; margin-top: 24px; text-align: center; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Preços para Licitações</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --paper:#EEE8D8;
+    --paper-raised:#F6F1E4;
+    --ink:#1E2A22;
+    --ink-soft:#4B5A4E;
+    --rule:#B8AD8C;
+    --seal:#1B3A34;
+    --seal-soft:#DCE4DF;
+    --gold:#9C7A3C;
+    --alert:#9E3324;
+    --alert-soft:#F3DAD3;
+    --ok:#2F6B4F;
+    --shadow: 0 1px 0 rgba(30,42,34,0.08);
+    --serif: 'Lora', Georgia, serif;
+    --sans: 'IBM Plex Sans', -apple-system, sans-serif;
+    --mono: 'IBM Plex Mono', 'Courier New', monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    background-image:
+      linear-gradient(var(--paper) 1px, transparent 1px);
+    background-size: 100% 2.1rem;
+    color:var(--ink);
+    font-family:var(--sans);
+    line-height:1.5;
+    padding-bottom:4rem;
+  }
+  a{color:var(--seal);}
+
+  /* Letterhead */
+  header.letterhead{
+    max-width:1100px;
+    margin:0 auto;
+    padding:2.6rem 1.5rem 1.4rem;
+  }
+  .letterhead-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    gap:1.5rem;
+    flex-wrap:wrap;
+  }
+  .letterhead h1{
+    font-family:var(--serif);
+    font-weight:600;
+    font-size:clamp(1.6rem, 3vw, 2.3rem);
+    margin:0 0 0.35rem;
+    letter-spacing:-0.01em;
+  }
+  .letterhead p{
+    margin:0;
+    font-family:var(--mono);
+    font-size:0.78rem;
+    color:var(--ink-soft);
+    letter-spacing:0.01em;
+  }
+  .rule-double{
+    margin-top:1.4rem;
+    border-top:2px solid var(--ink);
+    padding-top:3px;
+    border-bottom:1px solid var(--ink);
+  }
+  .btn{
+    font-family:var(--sans);
+    font-weight:600;
+    font-size:0.88rem;
+    border:1.5px solid var(--ink);
+    background:var(--paper-raised);
+    color:var(--ink);
+    padding:0.6rem 1.1rem;
+    cursor:pointer;
+    border-radius:2px;
+    transition:background .15s ease, transform .1s ease;
+    white-space:nowrap;
+  }
+  .btn:hover{background:var(--ink);color:var(--paper-raised);}
+  .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--seal);color:var(--seal-soft);border-color:var(--seal);}
+  .btn.primary:hover{background:#132923;}
+  .btn.ghost{background:transparent;}
+  .btn.small{padding:0.35rem 0.7rem;font-size:0.78rem;}
+
+  main{
+    max-width:1100px;
+    margin:0 auto;
+    padding:0 1.5rem;
+    display:grid;
+    grid-template-columns: 1fr 340px;
+    gap:2rem;
+    align-items:start;
+  }
+  @media (max-width: 880px){
+    main{grid-template-columns:1fr;}
+  }
+
+  section.step{
+    background:var(--paper-raised);
+    border:1px solid var(--rule);
+    border-radius:2px;
+    padding:1.5rem 1.6rem;
+    margin-top:1.6rem;
+    box-shadow:var(--shadow);
+  }
+  section.step:first-of-type{margin-top:2rem;}
+  .step-head{
+    display:flex;
+    align-items:baseline;
+    gap:0.7rem;
+    margin-bottom:1.1rem;
+  }
+  .step-num{
+    font-family:var(--serif);
+    font-style:italic;
+    font-size:1.3rem;
+    color:var(--gold);
+  }
+  .step-head h2{
+    font-family:var(--serif);
+    font-size:1.15rem;
+    font-weight:600;
+    margin:0;
+  }
+  .field-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap:0.9rem;
+  }
+  label{
+    display:block;
+    font-size:0.76rem;
+    font-family:var(--mono);
+    color:var(--ink-soft);
+    margin-bottom:0.3rem;
+  }
+  input, select{
+    width:100%;
+    font-family:var(--sans);
+    font-size:0.92rem;
+    padding:0.5rem 0.6rem;
+    border:1px solid var(--rule);
+    border-radius:2px;
+    background:#fff;
+    color:var(--ink);
+  }
+  input:focus, select:focus, .btn:focus-visible{
+    outline:2px solid var(--seal);
+    outline-offset:1px;
+  }
+
+  table.ledger{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:1rem;
+    font-size:0.86rem;
+  }
+  table.ledger th{
+    text-align:left;
+    font-family:var(--mono);
+    font-weight:500;
+    font-size:0.72rem;
+    color:var(--ink-soft);
+    border-bottom:1.5px solid var(--ink);
+    padding:0.4rem 0.5rem;
+  }
+  table.ledger td{
+    padding:0.5rem 0.5rem;
+    border-bottom:1px solid var(--rule);
+    font-family:var(--mono);
+  }
+  table.ledger tbody tr.outlier td{
+    color:var(--alert);
+  }
+  table.ledger td.num{text-align:right;}
+  .row-actions button{
+    background:none;border:none;color:var(--ink-soft);cursor:pointer;
+    font-family:var(--mono);font-size:0.75rem;text-decoration:underline;
+  }
+  .row-actions button:hover{color:var(--alert);}
+
+  .stamp{
+    display:inline-block;
+    border:2px solid var(--alert);
+    color:var(--alert);
+    font-family:var(--mono);
+    text-transform:uppercase;
+    font-size:0.65rem;
+    letter-spacing:0.04em;
+    padding:2px 7px;
+    border-radius:2px;
+    transform:rotate(-3deg);
+  }
+
+  .stat-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+    gap:1px;
+    background:var(--rule);
+    border:1px solid var(--rule);
+    margin-top:1.2rem;
+  }
+  .stat-cell{
+    background:var(--paper-raised);
+    padding:0.9rem 1rem;
+  }
+  .stat-cell .label{
+    font-family:var(--mono);
+    font-size:0.68rem;
+    color:var(--ink-soft);
+    display:block;
+    margin-bottom:0.25rem;
+  }
+  .stat-cell .value{
+    font-family:var(--serif);
+    font-size:1.4rem;
+    font-weight:600;
+  }
+  .stat-cell.highlight{background:var(--seal);}
+  .stat-cell.highlight .value, .stat-cell.highlight .label{color:var(--seal-soft);}
+
+  .warning{
+    margin-top:1rem;
+    border-left:3px solid var(--alert);
+    background:var(--alert-soft);
+    padding:0.7rem 0.9rem;
+    font-size:0.85rem;
+    color:#5c1c11;
+  }
+  .ok-note{
+    margin-top:1rem;
+    border-left:3px solid var(--ok);
+    background:#dfeee4;
+    padding:0.7rem 0.9rem;
+    font-size:0.85rem;
+    color:#1c4a34;
+  }
+
+  /* Budget sidebar */
+  aside.budget{
+    background:var(--seal);
+    color:var(--seal-soft);
+    border-radius:2px;
+    padding:1.4rem 1.3rem;
+    margin-top:2rem;
+    position:sticky;
+    top:1.5rem;
+  }
+  aside.budget h2{
+    font-family:var(--serif);
+    font-size:1.05rem;
+    margin:0 0 0.2rem;
+  }
+  aside.budget .sub{
+    font-family:var(--mono);
+    font-size:0.7rem;
+    opacity:0.75;
+    margin-bottom:1rem;
+    display:block;
+  }
+  .budget-item{
+    border-top:1px solid rgba(255,255,255,0.18);
+    padding:0.75rem 0;
+    font-size:0.84rem;
+  }
+  .budget-item .name{font-weight:600;margin-bottom:0.2rem;}
+  .budget-item .meta{
+    font-family:var(--mono);
+    font-size:0.72rem;
+    opacity:0.8;
+    display:flex;
+    justify-content:space-between;
+  }
+  .budget-total{
+    border-top:2px solid var(--seal-soft);
+    margin-top:0.6rem;
+    padding-top:0.8rem;
+    display:flex;
+    justify-content:space-between;
+    font-family:var(--serif);
+    font-size:1.15rem;
+    font-weight:600;
+  }
+  .budget-empty{
+    font-size:0.82rem;
+    opacity:0.75;
+    padding:1rem 0;
+  }
+  .budget-actions{
+    display:flex;
+    flex-direction:column;
+    gap:0.5rem;
+    margin-top:1.1rem;
+  }
+  .budget-actions .btn{
+    border-color:var(--seal-soft);
+    background:transparent;
+    color:var(--seal-soft);
+  }
+  .budget-actions .btn:hover{
+    background:var(--seal-soft);
+    color:var(--seal);
+  }
+  .budget-actions .btn.primary{
+    background:var(--seal-soft);
+    color:var(--seal);
+  }
+  .budget-actions .btn.primary:hover{
+    background:#fff;
+  }
+
+  footer{
+    max-width:1100px;
+    margin:3rem auto 0;
+    padding:1.2rem 1.5rem 0;
+    border-top:1px solid var(--rule);
+    font-family:var(--mono);
+    font-size:0.72rem;
+    color:var(--ink-soft);
+  }
+</style>
 </head>
 <body>
-  <div class="container">
-    <header>
+
+<header class="letterhead">
+  <div class="letterhead-row">
+    <div>
       <h1>Painel de Preços para Licitações</h1>
-      <p>Módulo de teste da lógica estatística — Lei 14.133/2021, Art. 23 e IN SEGES/ME nº 65/2021</p>
-    </header>
-
-    <div class="card">
-      <label for="precos">Cole os preços unitários (um por linha)</label>
-      <textarea id="precos" placeholder="Exemplo:&#10;9.80&#10;10.10&#10;9.90&#10;10.20&#10;100.00&#10;10.00&#10;9.70&#10;10.30&#10;10.00&#10;9.90">9.80
-10.10
-9.90
-10.20
-100.00
-10.00
-9.70
-10.30
-10.00
-9.90</textarea>
-      <button id="calcular">Calcular preço de referência</button>
-
-      <div class="resultado" id="resultado"></div>
-      <div id="aviso"></div>
-      <div class="lista-amostras" id="amostras"></div>
+      <p>Lei 14.133/2021, Art. 23 · IN SEGES/ME nº 65/2021 · pesquisa de preços e padronização de orçamentos</p>
     </div>
+    <button class="btn" id="reset-btn">Limpar sessão</button>
+  </div>
+  <div class="rule-double"></div>
+</header>
 
-    <footer>
-      Este é um módulo de demonstração. Em produção, os preços viriam de fontes reais
-      (PNCP e Painel de Preços do governo federal), nunca digitados à mão.
-    </footer>
+<main>
+  <div>
+    <section class="step">
+      <div class="step-head">
+        <span class="step-num">1</span>
+        <h2>Identificar o item</h2>
+      </div>
+      <div class="field-grid">
+        <div>
+          <label for="item-codigo">Código CATMAT / CATSER</label>
+          <input id="item-codigo" type="text" placeholder="ex: 240987">
+        </div>
+        <div>
+          <label for="item-desc">Descrição</label>
+          <input id="item-desc" type="text" placeholder="ex: Papel A4, resma 500 folhas">
+        </div>
+        <div>
+          <label for="item-unidade">Unidade</label>
+          <input id="item-unidade" type="text" placeholder="ex: resma, unidade, kg">
+        </div>
+        <div>
+          <label for="item-qtd">Quantidade no orçamento</label>
+          <input id="item-qtd" type="number" min="1" value="1">
+        </div>
+      </div>
+    </section>
+
+    <section class="step">
+      <div class="step-head">
+        <span class="step-num">2</span>
+        <h2>Buscar preços praticados (fonte oficial)</h2>
+      </div>
+      <p style="font-size:0.85rem;color:var(--ink-soft);margin-top:-0.4rem;">
+        Consulta ao vivo à API pública do Módulo Pesquisa de Preço do Compras.gov.br (Ministério da Gestão),
+        pelo código CATMAT/CATSER informado no passo 1. Nenhum valor é digitado ou inventado — os preços
+        abaixo vêm diretamente da resposta da API oficial.
+      </p>
+      <div class="field-grid">
+        <div>
+          <label for="tipo-item">Tipo de item</label>
+          <select id="tipo-item">
+            <option value="material">Material (CATMAT)</option>
+            <option value="servico">Serviço (CATSER)</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <button class="btn primary" id="buscar-api-btn" style="width:100%;">Buscar preços na API oficial</button>
+        </div>
+      </div>
+
+      <div id="api-status" style="font-size:0.85rem;margin-top:1rem;"></div>
+
+      <table class="ledger" id="precos-table" style="display:none;">
+        <thead>
+          <tr>
+            <th>Fonte</th><th>Órgão / UASG</th><th>UF</th><th>Data</th>
+            <th style="text-align:right;">Valor (R$)</th><th></th><th></th>
+          </tr>
+        </thead>
+        <tbody id="precos-tbody"></tbody>
+      </table>
+
+      <div id="precos-empty" style="font-size:0.85rem;color:var(--ink-soft);margin-top:0.8rem;">
+        Nenhum preço carregado ainda. Informe o código CATMAT/CATSER no passo 1 e clique em "Buscar preços na API oficial".
+      </div>
+
+      <details style="margin-top:1.1rem;">
+        <summary style="cursor:pointer;font-family:var(--mono);font-size:0.78rem;color:var(--ink-soft);">
+          Adicionar cotação obtida manualmente (telefone, e-mail, orçamento de fornecedor)
+        </summary>
+        <div class="field-grid" style="margin-top:0.9rem;">
+          <div>
+            <label for="preco-orgao">Fornecedor / órgão</label>
+            <input id="preco-orgao" type="text" placeholder="ex: Fornecedor XYZ Ltda">
+          </div>
+          <div>
+            <label for="preco-uf">UF</label>
+            <input id="preco-uf" type="text" maxlength="2" placeholder="SP">
+          </div>
+          <div>
+            <label for="preco-data">Data da cotação</label>
+            <input id="preco-data" type="date">
+          </div>
+          <div>
+            <label for="preco-valor">Preço unitário (R$)</label>
+            <input id="preco-valor" type="number" step="0.01" min="0" placeholder="0,00">
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button class="btn" id="add-preco-btn" style="width:100%;">Adicionar cotação manual</button>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <section class="step">
+      <div class="step-head">
+        <span class="step-num">3</span>
+        <h2>Preço de referência calculado</h2>
+      </div>
+      <button class="btn" id="calc-btn">Calcular preço de referência</button>
+
+      <div class="stat-grid" id="stat-grid" style="display:none;">
+        <div class="stat-cell"><span class="label">amostras válidas</span><span class="value" id="stat-n">—</span></div>
+        <div class="stat-cell"><span class="label">média</span><span class="value" id="stat-media">—</span></div>
+        <div class="stat-cell highlight"><span class="label">mediana (referência)</span><span class="value" id="stat-mediana">—</span></div>
+        <div class="stat-cell"><span class="label">desvio padrão</span><span class="value" id="stat-desvio">—</span></div>
+        <div class="stat-cell"><span class="label">coef. de variação</span><span class="value" id="stat-cv">—</span></div>
+      </div>
+
+      <div id="stat-warning"></div>
+
+      <button class="btn primary" id="add-to-budget-btn" style="margin-top:1.2rem;display:none;">
+        Adicionar item ao orçamento
+      </button>
+    </section>
   </div>
 
-  <script type="module">
-    import { calcularReferencia } from './src/estatistica.js';
+  <aside class="budget">
+    <h2>Orçamento em montagem</h2>
+    <span class="sub" id="budget-count">0 itens</span>
+    <div id="budget-list">
+      <div class="budget-empty">Nenhum item adicionado. Calcule um preço de referência e adicione ao orçamento.</div>
+    </div>
+    <div class="budget-total" id="budget-total" style="display:none;">
+      <span>Total</span><span id="budget-total-value">R$ 0,00</span>
+    </div>
+    <div class="budget-actions">
+      <button class="btn primary" id="export-xlsx-btn">Exportar orçamento (.xlsx)</button>
+      <button class="btn ghost" id="clear-budget-btn">Esvaziar orçamento</button>
+    </div>
+  </aside>
+</main>
 
-    const fmt = (v, d = 2) => (v === null || v === undefined || Number.isNaN(v) ? '—' : Number(v).toFixed(d));
+<footer>
+  Os preços de referência vêm ao vivo da API oficial do Módulo Pesquisa de Preço (Compras.gov.br/Ministério
+  da Gestão), consultada por código CATMAT/CATSER — nenhum valor é digitado por padrão. A opção de cotação
+  manual serve apenas para registrar, com rastreabilidade, uma cotação real obtida por telefone, e-mail ou
+  orçamento direto de fornecedor, como fonte adicional permitida pela IN SEGES/ME nº 65/2021. Este módulo
+  roda inteiramente no navegador; se a chamada à API for bloqueada por CORS no domínio de publicação,
+  ela deve ser roteada por um proxy (ex: Cloudflare Workers).
+</footer>
 
-    const input = document.getElementById('precos');
-    const resultadoEl = document.getElementById('resultado');
-    const avisoEl = document.getElementById('aviso');
-    const amostrasEl = document.getElementById('amostras');
+<script>
+(function(){
+  const precos = [];
+  const orcamento = [];
+  let ultimoCalculo = null;
 
-    document.getElementById('calcular').addEventListener('click', () => {
-      const valores = input.value
-        .split('\n')
-        .map((l) => l.trim().replace(',', '.'))
-        .filter(Boolean)
-        .map(Number);
+  const fmtBRL = v => v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+  const fonteLabel = {
+    pncp: 'PNCP',
+    painel_precos: 'Painel de Preços',
+    ata_registro: 'Ata de registro',
+    pesquisa_direta: 'Pesquisa direta'
+  };
 
-      const numerosValidos = valores.filter((v) => Number.isFinite(v) && v > 0);
-      const amostras = numerosValidos.map((v, i) => ({
-        id: i,
-        preco_unitario: v,
-        orgao: `Fonte ${i + 1}`,
-        data_homologacao: null,
-      }));
+  const precosTbody = document.getElementById('precos-tbody');
+  const precosEmpty = document.getElementById('precos-empty');
+  const precosTable = document.getElementById('precos-table');
+  const apiStatus = document.getElementById('api-status');
 
-      const r = calcularReferencia(amostras);
+  fonteLabel.compras_gov_pesquisa_preco = 'Compras.gov.br (API oficial)';
+  fonteLabel.manual = 'Cotação manual';
 
-      if (!r.preco_referencia) {
-        avisoEl.innerHTML = '<div class="aviso erro">Nenhum preço válido informado. Informe números maiores que zero.</div>';
-        resultadoEl.innerHTML = '';
-        amostrasEl.innerHTML = '';
-        return;
+  function renderPrecos(outlierSet){
+    precosTbody.innerHTML = '';
+    const temPrecos = precos.length > 0;
+    precosEmpty.style.display = temPrecos ? 'none' : 'block';
+    precosTable.style.display = temPrecos ? 'table' : 'none';
+    precos.forEach((p, i) => {
+      const tr = document.createElement('tr');
+      if (outlierSet && outlierSet.has(i)) tr.className = 'outlier';
+      tr.innerHTML = `
+        <td>${fonteLabel[p.fonte] || p.fonte}</td>
+        <td>${p.orgao || '—'}</td>
+        <td>${p.uf || '—'}</td>
+        <td>${p.data || '—'}</td>
+        <td class="num">${fmtBRL(p.valor)}</td>
+        <td>${outlierSet && outlierSet.has(i) ? '<span class="stamp">fora da curva</span>' : ''}</td>
+        <td class="row-actions"><button data-i="${i}">remover</button></td>
+      `;
+      precosTbody.appendChild(tr);
+    });
+    document.querySelectorAll('#precos-tbody .row-actions button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        precos.splice(Number(btn.dataset.i), 1);
+        document.getElementById('stat-grid').style.display = 'none';
+        document.getElementById('add-to-budget-btn').style.display = 'none';
+        document.getElementById('stat-warning').innerHTML = '';
+        renderPrecos();
+      });
+    });
+  }
+
+  document.getElementById('add-preco-btn').addEventListener('click', () => {
+    const valor = parseFloat(document.getElementById('preco-valor').value);
+    if (!valor || valor <= 0) { alert('Informe um valor de preço válido.'); return; }
+    precos.push({
+      fonte: 'manual',
+      orgao: document.getElementById('preco-orgao').value.trim(),
+      uf: document.getElementById('preco-uf').value.trim().toUpperCase(),
+      data: document.getElementById('preco-data').value,
+      valor
+    });
+    document.getElementById('preco-orgao').value = '';
+    document.getElementById('preco-valor').value = '';
+    renderPrecos();
+  });
+
+  // Busca real na API oficial do Compras.gov.br — Módulo Pesquisa de Preço.
+  // Documentação: https://www.gov.br/compras/pt-br/acesso-a-informacao/manuais/manual-dados-abertos/manual-api-compras.pdf
+  // Nenhum dado é inventado: se a API falhar ou não retornar registros, isso é
+  // mostrado explicitamente ao usuário — a tabela nunca é preenchida com valores fictícios.
+  document.getElementById('buscar-api-btn').addEventListener('click', async () => {
+    const codigo = document.getElementById('item-codigo').value.trim();
+    if (!codigo) { alert('Informe o código CATMAT/CATSER no passo 1 antes de buscar.'); return; }
+    const tipo = document.getElementById('tipo-item').value;
+    const endpoint = tipo === 'material'
+      ? 'https://dadosabertos.compras.gov.br/modulo-pesquisa-preco/1_consultarMaterial'
+      : 'https://dadosabertos.compras.gov.br/modulo-pesquisa-preco/3_consultarServico';
+    const url = `${endpoint}?codigoItemCatalogo=${encodeURIComponent(codigo)}&tamanhoPagina=100&pagina=1`;
+
+    apiStatus.innerHTML = '<span style="color:var(--ink-soft);">Consultando a API oficial do Compras.gov.br…</span>';
+    const btn = document.getElementById('buscar-api-btn');
+    btn.disabled = true;
+
+    try {
+      const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!resp.ok) throw new Error('A API respondeu com status ' + resp.status);
+      const data = await resp.json();
+      const lista = data.resultado || data.result || data.resultados || [];
+
+      if (!lista.length) {
+        apiStatus.innerHTML = '<div class="warning">A API não retornou nenhum preço praticado para o código '
+          + codigo + '. Confira se o código CATMAT/CATSER está correto, ou registre uma cotação manual abaixo.</div>';
+      } else {
+        // Nomes de campo do JSON de retorno podem variar; mapeamos as variantes
+        // conhecidas e ignoramos registros sem valor numérico válido.
+        const novos = lista.map(r => ({
+          fonte: 'compras_gov_pesquisa_preco',
+          orgao: r.nomeUnidadeGerenciadora || r.nomeOrgao || r.nomeUasg || r.unidadeGestora || r.siglaOrgao || '',
+          uf: r.siglaUf || r.ufResultado || r.uf || '',
+          data: r.dataResultado || r.dataCompra || r.dataHomologacao || '',
+          valor: Number(r.valorUnitarioResultado ?? r.valorUnitario ?? r.valorUnitarioHomologado ?? r.precoUnitario)
+        })).filter(p => p.valor && !isNaN(p.valor) && p.valor > 0);
+
+        if (!novos.length) {
+          apiStatus.innerHTML = '<div class="warning">A API retornou registros para este código, mas não foi possível '
+            + 'identificar o campo de valor unitário no formato de resposta atual. Confira o schema em '
+            + '<a href="https://dadosabertos.compras.gov.br/swagger-ui/index.html" target="_blank" rel="noopener">'
+            + 'dadosabertos.compras.gov.br/swagger-ui</a> e ajuste os nomes de campo no código-fonte.</div>';
+        } else {
+          precos.push(...novos);
+          renderPrecos();
+          apiStatus.innerHTML = '<div class="ok-note">' + novos.length + ' preço(s) carregado(s) da API oficial para o código '
+            + codigo + '.</div>';
+        }
       }
+    } catch (err) {
+      apiStatus.innerHTML = '<div class="warning">Não foi possível consultar a API oficial agora ('
+        + err.message + '). Isso costuma acontecer por bloqueio de CORS quando o site roda direto do GitHub Pages, '
+        + 'ou instabilidade temporária da API. Nenhum dado fictício foi exibido — se o erro persistir, rotear esta '
+        + 'chamada por um proxy (ex: o Cloudflare Worker já usado no Painel PNCP) resolve o CORS. Você também pode '
+        + 'registrar uma cotação manual abaixo enquanto isso.</div>';
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
-      const metodo = r.metodo_calculo === 'mediana' ? 'Mediana' : 'Média';
-      resultadoEl.innerHTML = [
-        metrica('Preço de Referência', fmt(r.preco_referencia), true),
-        metrica('Método', metodo),
-        metrica('Média', fmt(r.media)),
-        metrica('Mediana', fmt(r.mediana)),
-        metrica('Desvio Padrão', fmt(r.desvio_padrao)),
-        metrica('Coef. de Variação', r.coeficiente_variacao === null ? '—' : (r.coeficiente_variacao * 100).toFixed(1) + '%'),
-        metrica('Outliers descartados', String(r.outliers_descartados)),
-        metrica('Fontes usadas', String(r.amostras_usadas)),
-      ].join('');
+  function quartil(sorted, q){
+    const pos = (sorted.length - 1) * q;
+    const base = Math.floor(pos);
+    const rest = pos - base;
+    if (sorted[base + 1] !== undefined) {
+      return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+    }
+    return sorted[base];
+  }
 
-      avisoEl.innerHTML = r.aviso
-        ? `<div class="aviso alerta">${r.aviso}</div>`
-        : '';
+  document.getElementById('calc-btn').addEventListener('click', () => {
+    if (precos.length < 2) { alert('Adicione pelo menos 2 preços para calcular.'); return; }
 
-      const linhas = r.amostras.map((a) => {
-        const cls = a.outlier ? 'class="outlier"' : '';
-        return `<tr ${cls}><td>${a.orgao}</td><td>${fmt(a.preco_unitario)}</td><td>${a.outlier ? 'não (outlier)' : 'sim'}</td></tr>`;
-      }).join('');
-      amostrasEl.innerHTML = `
-        <table>
-          <thead><tr><th>Fonte</th><th>Preço</th><th>Usado no cálculo?</th></tr></thead>
-          <tbody>${linhas}</tbody>
-        </table>`;
+    const valores = precos.map(p => p.valor);
+    const sorted = [...valores].sort((a,b) => a - b);
+    const q1 = quartil(sorted, 0.25);
+    const q3 = quartil(sorted, 0.75);
+    const iqr = q3 - q1;
+    const low = q1 - 1.5 * iqr;
+    const high = q3 + 1.5 * iqr;
+
+    const outlierSet = new Set();
+    const validos = [];
+    precos.forEach((p, i) => {
+      if (p.valor < low || p.valor > high) outlierSet.add(i);
+      else validos.push(p.valor);
     });
 
-    document.getElementById('calcular').click();
+    const n = validos.length;
+    const media = validos.reduce((a,b) => a+b, 0) / n;
+    const sortedValidos = [...validos].sort((a,b) => a-b);
+    const mediana = quartil(sortedValidos, 0.5);
+    const variancia = n > 1 ? validos.reduce((a,b) => a + Math.pow(b-media,2), 0) / (n-1) : 0;
+    const desvio = Math.sqrt(variancia);
+    const cv = media ? (desvio / media) * 100 : 0;
 
-    function metrica(rotulo, valor, destaque = false) {
-      return `<div class="metrica${destaque ? ' destaque' : ''}"><div class="rotulo">${rotulo}</div><div class="valor">${valor}</div></div>`;
+    document.getElementById('stat-n').textContent = n;
+    document.getElementById('stat-media').textContent = fmtBRL(media);
+    document.getElementById('stat-mediana').textContent = fmtBRL(mediana);
+    document.getElementById('stat-desvio').textContent = fmtBRL(desvio);
+    document.getElementById('stat-cv').textContent = cv.toFixed(1) + '%';
+    document.getElementById('stat-grid').style.display = 'grid';
+
+    const warningEl = document.getElementById('stat-warning');
+    warningEl.innerHTML = '';
+    if (precos.length < 3) {
+      warningEl.innerHTML = '<div class="warning">A IN SEGES/ME 65/2021 recomenda no mínimo 3 fontes de preço. Adicione mais cotações antes de fechar o orçamento.</div>';
+    } else if (cv > 25) {
+      warningEl.innerHTML = '<div class="warning">Coeficiente de variação alto (' + cv.toFixed(1) + '%). Preferir a mediana como preço de referência e revisar as fontes discrepantes.</div>';
+    } else {
+      warningEl.innerHTML = '<div class="ok-note">Dispersão dentro do esperado. Preço de referência calculado com base em ' + n + ' fonte(s) válida(s).</div>';
     }
-  </script>
+
+    renderPrecos(outlierSet);
+
+    ultimoCalculo = {
+      codigo: document.getElementById('item-codigo').value.trim(),
+      descricao: document.getElementById('item-desc').value.trim(),
+      unidade: document.getElementById('item-unidade').value.trim(),
+      quantidade: parseFloat(document.getElementById('item-qtd').value) || 1,
+      media, mediana, desvio, cv, n,
+      fontes: precos.map((p,i) => ({...p, descartado: outlierSet.has(i)}))
+    };
+    document.getElementById('add-to-budget-btn').style.display = 'inline-block';
+  });
+
+  function renderBudget(){
+    const list = document.getElementById('budget-list');
+    const countEl = document.getElementById('budget-count');
+    const totalRow = document.getElementById('budget-total');
+    countEl.textContent = orcamento.length + (orcamento.length === 1 ? ' item' : ' itens');
+
+    if (!orcamento.length) {
+      list.innerHTML = '<div class="budget-empty">Nenhum item adicionado. Calcule um preço de referência e adicione ao orçamento.</div>';
+      totalRow.style.display = 'none';
+      return;
+    }
+
+    list.innerHTML = '';
+    let total = 0;
+    orcamento.forEach((item, i) => {
+      const subtotal = item.mediana * item.quantidade;
+      total += subtotal;
+      const div = document.createElement('div');
+      div.className = 'budget-item';
+      div.innerHTML = `
+        <div class="name">${item.descricao || item.codigo || 'Item sem descrição'}</div>
+        <div class="meta"><span>${item.quantidade} × ${fmtBRL(item.mediana)}</span><span>${fmtBRL(subtotal)}</span></div>
+        <div class="meta"><button data-i="${i}" style="background:none;border:none;color:inherit;opacity:0.75;cursor:pointer;font-family:var(--mono);font-size:0.7rem;text-decoration:underline;padding:0;">remover</button></div>
+      `;
+      list.appendChild(div);
+    });
+    totalRow.style.display = 'flex';
+    document.getElementById('budget-total-value').textContent = fmtBRL(total);
+
+    list.querySelectorAll('button[data-i]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        orcamento.splice(Number(btn.dataset.i), 1);
+        saveBudget();
+        renderBudget();
+      });
+    });
+  }
+
+  function saveBudget(){
+    try { localStorage.setItem('painel-precos-orcamento', JSON.stringify(orcamento)); } catch(e) {}
+  }
+  function loadBudget(){
+    try {
+      const raw = localStorage.getItem('painel-precos-orcamento');
+      if (raw) orcamento.push(...JSON.parse(raw));
+    } catch(e) {}
+  }
+
+  document.getElementById('add-to-budget-btn').addEventListener('click', () => {
+    if (!ultimoCalculo) return;
+    orcamento.push(ultimoCalculo);
+    saveBudget();
+    renderBudget();
+    ultimoCalculo = null;
+    document.getElementById('add-to-budget-btn').style.display = 'none';
+  });
+
+  document.getElementById('clear-budget-btn').addEventListener('click', () => {
+    if (!orcamento.length) return;
+    if (!confirm('Esvaziar todo o orçamento em montagem?')) return;
+    orcamento.length = 0;
+    saveBudget();
+    renderBudget();
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    if (!confirm('Limpar todos os dados desta sessão (preços coletados e orçamento)?')) return;
+    localStorage.removeItem('painel-precos-orcamento');
+    location.reload();
+  });
+
+  document.getElementById('export-xlsx-btn').addEventListener('click', () => {
+    if (!orcamento.length) { alert('Adicione ao menos um item ao orçamento antes de exportar.'); return; }
+
+    const wb = XLSX.utils.book_new();
+
+    const orcamentoRows = orcamento.map(item => ({
+      'Item': item.descricao,
+      'Código CATMAT/CATSER': item.codigo,
+      'Unidade': item.unidade,
+      'Quantidade': item.quantidade,
+      'Preço Unitário de Referência (mediana)': item.mediana,
+      'Preço Total': item.mediana * item.quantidade,
+      'Nº de Fontes Usadas': item.fontes.filter(f => !f.descartado).length,
+      'Coef. de Variação (%)': item.cv.toFixed(1)
+    }));
+    const wsOrc = XLSX.utils.json_to_sheet(orcamentoRows);
+    XLSX.utils.book_append_sheet(wb, wsOrc, 'Orçamento');
+
+    const memRows = [];
+    orcamento.forEach(item => {
+      item.fontes.forEach(f => {
+        memRows.push({
+          'Item': item.descricao,
+          'Código': item.codigo,
+          'Fonte': fonteLabel[f.fonte],
+          'Órgão/Fornecedor': f.orgao,
+          'UF': f.uf,
+          'Data': f.data,
+          'Valor Coletado (R$)': f.valor,
+          'Usado no Cálculo': f.descartado ? 'Não (outlier)' : 'Sim'
+        });
+      });
+    });
+    const wsMem = XLSX.utils.json_to_sheet(memRows);
+    XLSX.utils.book_append_sheet(wb, wsMem, 'Memória de Cálculo');
+
+    const metodologia = [
+      { 'Metodologia aplicada': 'Pesquisa de preços conforme Lei 14.133/2021, Art. 23, e IN SEGES/ME nº 65/2021.' },
+      { 'Metodologia aplicada': 'Preço de referência adotado: mediana das cotações válidas.' },
+      { 'Metodologia aplicada': 'Descarte de outliers: método do intervalo interquartil (IQR), limites Q1-1,5×IQR e Q3+1,5×IQR.' },
+      { 'Metodologia aplicada': 'Mínimo recomendado de 3 fontes distintas por item.' },
+    ];
+    const wsMet = XLSX.utils.json_to_sheet(metodologia);
+    XLSX.utils.book_append_sheet(wb, wsMet, 'Metodologia');
+
+    XLSX.writeFile(wb, 'orcamento-padronizado.xlsx');
+  });
+
+  loadBudget();
+  renderBudget();
+})();
+</script>
+
 </body>
 </html>
