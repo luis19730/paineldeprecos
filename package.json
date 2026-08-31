@@ -1,0 +1,13 @@
+{
+  "name": "painel-precos-licitacoes",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Módulo isolado de teste da lógica estatística de pesquisa de preços (média, mediana, desvio padrão, coeficiente de variação e descarte de outliers) para embasar licitações públicas (Lei 14.133/2021, IN SEGES/ME 65/2021).",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "test:watch": "node --watch --test \"test/**/*.test.js\""
+  },
+  "keywords": ["catmat", "licitacao", "lei-14.133", "precos", "estatistica"],
+  "license": "MIT"
+}
