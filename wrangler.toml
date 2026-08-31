@@ -1,0 +1,7 @@
+name = "painel-precos-licitacoes"
+main = "worker/index.js"
+compatibility_date = "2024-12-01"
+workers_dev = true
+
+[vars]
+DADOS_ABERTOS_BASE_URL = "https://dadosabertos.compras.gov.br"

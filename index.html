@@ -561,17 +561,32 @@
     const codigo = document.getElementById('item-codigo').value.trim();
     if (!codigo) { alert('Informe o código CATMAT/CATSER no passo 1 antes de buscar.'); return; }
     const tipo = document.getElementById('tipo-item').value;
+    // API_BASE_URL aponta para o Cloudflare Worker que protege contra bloqueio de
+    // CORS (o navegador não consegue falar direto com dadosabertos.compras.gov.br).
+    // Defina o endereço do worker aqui. Como fallback, tenta a API direta.
+    const API_BASE_URL = 'https://painel-precos-licitacoes.luis19730.workers.dev';
+    const rota = tipo === 'material' ? 'material' : 'servico';
+    const proxiedUrl = `${API_BASE_URL}/api/pesquisa-preco/${rota}?codigo=${encodeURIComponent(codigo)}`;
     const endpoint = tipo === 'material'
       ? 'https://dadosabertos.compras.gov.br/modulo-pesquisa-preco/1_consultarMaterial'
       : 'https://dadosabertos.compras.gov.br/modulo-pesquisa-preco/3_consultarServico';
-    const url = `${endpoint}?codigoItemCatalogo=${encodeURIComponent(codigo)}&tamanhoPagina=100&pagina=1`;
+    const directUrl = `${endpoint}?codigoItemCatalogo=${encodeURIComponent(codigo)}&tamanhoPagina=100&pagina=1`;
 
     apiStatus.innerHTML = '<span style="color:var(--ink-soft);">Consultando a API oficial do Compras.gov.br…</span>';
     const btn = document.getElementById('buscar-api-btn');
     btn.disabled = true;
 
     try {
-      const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      let resp = null;
+      try {
+        resp = await fetch(proxiedUrl, { headers: { 'Accept': 'application/json' } });
+      } catch (e) {
+        resp = null; // proxy indisponível → tenta direto
+      }
+      if (!resp || !resp.ok) {
+        // Fallback: chamada direta (pode falhar por CORS em alguns navegadores).
+        resp = await fetch(directUrl, { headers: { 'Accept': 'application/json' } });
+      }
       if (!resp.ok) throw new Error('A API respondeu com status ' + resp.status);
       const data = await resp.json();
       const lista = data.resultado || data.result || data.resultados || [];
