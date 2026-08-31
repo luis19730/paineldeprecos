@@ -570,7 +570,10 @@
     const endpoint = tipo === 'material'
       ? 'https://dadosabertos.compras.gov.br/modulo-pesquisa-preco/1_consultarMaterial'
       : 'https://dadosabertos.compras.gov.br/modulo-pesquisa-preco/3_consultarServico';
-    const directUrl = `${endpoint}?codigoItemCatalogo=${encodeURIComponent(codigo)}&tamanhoPagina=100&pagina=1`;
+    // Material usa o novo parâmetro tipo/codigo; serviço ainda usa codigoItemCatalogo.
+    const directUrl = tipo === 'material'
+      ? `${endpoint}?tipo=codigoItemCatalogo&codigo=${encodeURIComponent(codigo)}&tamanhoPagina=100&pagina=1`
+      : `${endpoint}?codigoItemCatalogo=${encodeURIComponent(codigo)}&tamanhoPagina=100&pagina=1`;
 
     apiStatus.innerHTML = '<span style="color:var(--ink-soft);">Consultando a API oficial do Compras.gov.br…</span>';
     const btn = document.getElementById('buscar-api-btn');
@@ -600,7 +603,7 @@
         const novos = lista.map(r => ({
           fonte: 'compras_gov_pesquisa_preco',
           orgao: r.nomeUnidadeGerenciadora || r.nomeOrgao || r.nomeUasg || r.unidadeGestora || r.siglaOrgao || '',
-          uf: r.siglaUf || r.ufResultado || r.uf || '',
+          uf: r.estado || r.siglaUf || r.ufResultado || r.uf || '',
           data: r.dataResultado || r.dataCompra || r.dataHomologacao || '',
           valor: Number(r.valorUnitarioResultado ?? r.valorUnitario ?? r.valorUnitarioHomologado ?? r.precoUnitario)
         })).filter(p => p.valor && !isNaN(p.valor) && p.valor > 0);

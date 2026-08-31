@@ -55,17 +55,27 @@ export default {
       return json(JSON.stringify({ erro: 'Parâmetro "codigo" é obrigatório.' }), 400);
     }
 
-    const endpoint =
-      tipo === 'material'
-        ? '/modulo-pesquisa-preco/1_consultarMaterial'
-        : '/modulo-pesquisa-preco/3_consultarServico';
-
-    const apiUrl =
-      DADOS_ABERTOS_BASE_URL +
-      endpoint +
-      '?codigoItemCatalogo=' +
-      encodeURIComponent(codigo) +
-      '&tamanhoPagina=100&pagina=1';
+    // IMPORTANTE — quebra conhecida da API (2026-07→08): a SEGES trocou a assinatura
+    // de query da rota de MATERIAL (1_consultarMaterial): o parâmetro
+    // `codigoItemCatalogo` foi substituído por `tipo=codigoItemCatalogo` + `codigo`.
+    // A rota de SERVIÇO (3_consultarServico) NÃO mudou e ainda usa `codigoItemCatalogo`.
+    // Referência: https://dadosabertos.compras.gov.br
+    let apiUrl;
+    if (tipo === 'material') {
+      apiUrl =
+        DADOS_ABERTOS_BASE_URL +
+        '/modulo-pesquisa-preco/1_consultarMaterial' +
+        '?tipo=codigoItemCatalogo&codigo=' +
+        encodeURIComponent(codigo) +
+        '&tamanhoPagina=100&pagina=1';
+    } else {
+      apiUrl =
+        DADOS_ABERTOS_BASE_URL +
+        '/modulo-pesquisa-preco/3_consultarServico' +
+        '?codigoItemCatalogo=' +
+        encodeURIComponent(codigo) +
+        '&tamanhoPagina=100&pagina=1';
+    }
 
     try {
       const resp = await fetch(apiUrl, {
