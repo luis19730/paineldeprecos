@@ -609,6 +609,32 @@
     fechaSugestoes();
   }
 
+  // Identificação automática ao informar um código CATMAT de 6 dígitos:
+  // preenche a Descrição a partir do catálogo. A unidade não é exposta pela
+  // fonte e fica como campo livre.
+  async function identificaPorCodigo(codigo){
+    if (!/^\d{6}$/.test(codigo)) return;
+    if (!descInput.value.trim()) descInput.value = 'Identificando…';
+    try {
+      const resp = await fetch(API_BASE_URL + '/api/catalogo?q=' + encodeURIComponent(codigo));
+      if (!resp.ok) { if (descInput.value === 'Identificando…') descInput.value = ''; return; }
+      const data = await resp.json();
+      const it = (data.itens || [])[0];
+      if (it && it.descricao_item) {
+        descInput.value = it.descricao_item;
+      } else if (descInput.value === 'Identificando…') {
+        descInput.value = '';
+      }
+    } catch (e) {
+      if (descInput.value === 'Identificando…') descInput.value = '';
+    }
+  }
+
+  codigoInput.addEventListener('blur', () => identificaPorCodigo(codigoInput.value.trim()));
+  codigoInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === 'Tab') identificaPorCodigo(codigoInput.value.trim());
+  });
+
   descInput.addEventListener('input', () => {
     const termo = descInput.value.trim();
     clearTimeout(suggestTimer);
