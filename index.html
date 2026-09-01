@@ -160,6 +160,47 @@
     outline-offset:1px;
   }
 
+  .autocomplete{
+    position:relative;
+    z-index:20;
+  }
+  .autocomplete .sug-list{
+    position:absolute;
+    left:0;right:0;top:100%;
+    margin:2px 0 0;
+    padding:0;
+    list-style:none;
+    background:#fff;
+    border:1px solid var(--rule);
+    border-radius:2px;
+    max-height:280px;
+    overflow-y:auto;
+    box-shadow:0 4px 12px rgba(30,42,34,0.12);
+  }
+  .autocomplete .sug-list li{
+    padding:0.5rem 0.6rem;
+    cursor:pointer;
+    border-bottom:1px solid var(--rule);
+    font-size:0.8rem;
+    line-height:1.35;
+  }
+  .autocomplete .sug-list li:last-child{border-bottom:none;}
+  .autocomplete .sug-list li:hover,
+  .autocomplete .sug-list li.active{background:var(--seal-soft);}
+  .autocomplete .sug-list .sug-code{
+    font-family:var(--mono);
+    font-size:0.68rem;
+    color:var(--gold);
+    display:block;
+    margin-bottom:0.1rem;
+  }
+  .autocomplete .sug-empty{
+    padding:0.5rem 0.6rem;
+    font-size:0.78rem;
+    color:var(--ink-soft);
+    font-style:italic;
+  }
+
   table.ledger{
     width:100%;
     border-collapse:collapse;
@@ -358,7 +399,8 @@
         </div>
         <div>
           <label for="item-desc">Descrição</label>
-          <input id="item-desc" type="text" placeholder="ex: Papel A4, resma 500 folhas">
+          <input id="item-desc" type="text" placeholder="ex: Papel A4, resma 500 folhas" autocomplete="off">
+          <div id="desc-suggest" class="autocomplete"></div>
         </div>
         <div>
           <label for="item-unidade">Unidade</label>
@@ -508,6 +550,87 @@
   fonteLabel.compras_gov_pesquisa_preco = 'Compras.gov.br (API oficial)';
   fonteLabel.manual = 'Cotação manual';
 
+  // Endereço do Cloudflare Worker que protege contra bloqueio de CORS.
+  const API_BASE_URL = 'https://painel-precos-licitacoes.luis19730.workers.dev';
+
+  // Autocomplete do catálogo CATMAT por descrição (via worker -> catmat.com.br).
+  const descInput = document.getElementById('item-desc');
+  const codigoInput = document.getElementById('item-codigo');
+  const descSuggest = document.getElementById('desc-suggest');
+  let suggestItems = [];
+  let suggestIndex = -1;
+  let suggestTimer = null;
+
+  function fechaSugestoes(){
+    descSuggest.innerHTML = '';
+    suggestItems = [];
+    suggestIndex = -1;
+  }
+
+  function renderSugestoes(){
+    if (!suggestItems.length) {
+      descSuggest.innerHTML = '<ul class="sug-list"><li class="sug-empty">Nenhum item encontrado para essa descrição.</li></ul>';
+      return;
+    }
+    descSuggest.innerHTML = '<ul class="sug-list">' + suggestItems.map((it, i) =>
+      '<li data-i="' + i + '" class="' + (i === suggestIndex ? 'active' : '') + '">' +
+        '<span class="sug-code">' + it.codigo_item + '</span>' +
+        '<span>' + it.descricao_item + '</span>' +
+      '</li>'
+    ).join('') + '</ul>';
+    // Clicar em uma sugestão seleciona o item.
+    descSuggest.querySelectorAll('li[data-i]').forEach(li => {
+      li.addEventListener('click', () => selecionaSugestao(Number(li.dataset.i)));
+    });
+  }
+
+  function selecionaSugestao(i){
+    const it = suggestItems[i];
+    if (!it) return;
+    codigoInput.value = it.codigo_item;
+    descInput.value = it.descricao_item;
+    document.getElementById('item-unidade').value = '';
+    fechaSugestoes();
+  }
+
+  descInput.addEventListener('input', () => {
+    const termo = descInput.value.trim();
+    clearTimeout(suggestTimer);
+    if (termo.length < 3) { fechaSugestoes(); return; }
+    suggestTimer = setTimeout(async () => {
+      try {
+        const resp = await fetch(API_BASE_URL + '/api/catalogo?q=' + encodeURIComponent(termo));
+        if (!resp.ok) { fechaSugestoes(); return; }
+        const data = await resp.json();
+        suggestItems = data.itens || [];
+        suggestIndex = -1;
+        renderSugestoes();
+      } catch (e) { fechaSugestoes(); }
+    }, 350);
+  });
+
+  descInput.addEventListener('keydown', (e) => {
+    if (!descSuggest.querySelector('.sug-list')) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      suggestIndex = Math.min(suggestIndex + 1, suggestItems.length - 1);
+      renderSugestoes();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      suggestIndex = Math.max(suggestIndex - 1, 0);
+      renderSugestoes();
+    } else if (e.key === 'Enter' && suggestIndex >= 0) {
+      e.preventDefault();
+      selecionaSugestao(suggestIndex);
+    } else if (e.key === 'Escape') {
+      fechaSugestoes();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!descSuggest.contains(e.target) && e.target !== descInput) fechaSugestoes();
+  });
+
   function renderPrecos(outlierSet){
     precosTbody.innerHTML = '';
     const temPrecos = precos.length > 0;
@@ -561,10 +684,7 @@
     const codigo = document.getElementById('item-codigo').value.trim();
     if (!codigo) { alert('Informe o código CATMAT/CATSER no passo 1 antes de buscar.'); return; }
     const tipo = document.getElementById('tipo-item').value;
-    // API_BASE_URL aponta para o Cloudflare Worker que protege contra bloqueio de
-    // CORS (o navegador não consegue falar direto com dadosabertos.compras.gov.br).
-    // Defina o endereço do worker aqui. Como fallback, tenta a API direta.
-    const API_BASE_URL = 'https://painel-precos-licitacoes.luis19730.workers.dev';
+    // Rota válida no worker proxy (contorna CORS). Como fallback, tenta a API direta.
     const rota = tipo === 'material' ? 'material' : 'servico';
     const proxiedUrl = `${API_BASE_URL}/api/pesquisa-preco/${rota}?codigo=${encodeURIComponent(codigo)}`;
     const endpoint = tipo === 'material'
