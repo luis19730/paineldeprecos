@@ -96,6 +96,105 @@ async function handlePesquisaPreco(url) {
   }
 }
 
+/** Agrega estatísticas de mercado (referência externa) de um CATMAT/CATSER. */
+async function handleMercado(url) {
+  const match = url.pathname.match(/^\/api\/pesquisa-preco\/(material|servico)\/mercado$/);
+  if (!match) return json(JSON.stringify({ erro: 'Rota inválida.' }), 404);
+  const tipo = match[1];
+  const codigo = (url.searchParams.get('codigo') || '').trim();
+  if (!codigo) return json(JSON.stringify({ erro: 'Parâmetro "codigo" é obrigatório.' }), 400);
+
+  // Número máximo de páginas (100 registros cada) para não estourar o plano grátis
+  // do worker. 5 páginas = até 500 amostras, suficiente para uma mediana robusta.
+  const MAX_PAGINAS = 5;
+
+  let precoBase;
+  let qsBase;
+  if (tipo === 'material') {
+    precoBase =
+      DADOS_ABERTOS_BASE_URL + '/modulo-pesquisa-preco/1_consultarMaterial';
+    qsBase = 'tipo=codigoItemCatalogo&codigo=' + encodeURIComponent(codigo) + '&tamanhoPagina=100&';
+  } else {
+    precoBase =
+      DADOS_ABERTOS_BASE_URL + '/modulo-pesquisa-preco/3_consultarServico';
+    qsBase = 'codigoItemCatalogo=' + encodeURIComponent(codigo) + '&tamanhoPagina=100&';
+  }
+
+  const valores = [];
+  let totalRegistros = 0;
+  let paginasRestantes = Infinity;
+  let pagina = 1;
+
+  try {
+    while (pagina <= MAX_PAGINAS && paginasRestantes > 0) {
+      const resp = await fetch(precoBase + '?' + qsBase + 'pagina=' + pagina, {
+        headers: { accept: 'application/json', 'user-agent': 'painel-precos-licitacoes/0.1' },
+      });
+      if (!resp.ok) {
+        return json(
+          JSON.stringify({
+            erro: `A API do Compras.gov.br respondeu com status ${resp.status} na página ${pagina}.`,
+          }),
+          resp.status
+        );
+      }
+      const data = await resp.json();
+      const lista = Array.isArray(data.resultado) ? data.resultado : [];
+      lista.forEach((r) => {
+        const v = Number(r.precoUnitario);
+        if (Number.isFinite(v) && v > 0) valores.push(v);
+      });
+      if (data.totalRegistros !== undefined) totalRegistros = data.totalRegistros;
+      if (data.paginasRestantes !== undefined) paginasRestantes = Number(data.paginasRestantes);
+      else paginasRestantes = lista.length < 100 ? 0 : paginasRestantes - 1;
+      pagina++;
+    }
+
+    if (!valores.length) {
+      return json(JSON.stringify({ itens: [], medianaMercado: null, totalRegistros }), 200);
+    }
+
+    const sorted = [...valores].sort((a, b) => a - b);
+    const mediana = quartil(sorted, 0.5);
+    const media = sorted.reduce((a, b) => a + b, 0) / sorted.length;
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    const dp = valores.length > 1
+      ? Math.sqrt(valores.reduce((a, b) => a + Math.pow(b - media, 2), 0) / (valores.length - 1))
+      : 0;
+    const cv = media ? (dp / media) * 100 : 0;
+
+    return json(
+      JSON.stringify({
+        itens: valores.length,
+        totalRegistros,
+        medianaMercado: mediana,
+        mediaMercado: media,
+        min: min,
+        max: max,
+        desvioPadrao: dp,
+        cv: cv,
+        // Usa-se a mediana como referência externa (robusta a outliers).
+        referenciaMercado: mediana,
+      }),
+      200
+    );
+  } catch (err) {
+    return json(
+      JSON.stringify({ erro: 'Falha ao consultar o mercado.', detalhe: String(err && err.message) }),
+      502
+    );
+  }
+}
+
+function quartil(sorted, q) {
+  const pos = (sorted.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  if (sorted[base + 1] !== undefined) return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+  return sorted[base];
+}
+
 /** Endpoint de autocomplete do catálogo CATMAT (descrição ou código). */
 async function handleCatalogo(url) {
   const q = (url.searchParams.get('q') || '').trim();
@@ -165,6 +264,9 @@ export default {
       return json(JSON.stringify({ erro: 'Método não permitido.' }), 405);
     }
 
+    if (url.pathname.match(/^\/api\/pesquisa-preco\/(material|servico)\/mercado$/)) {
+      return handleMercado(url);
+    }
     if (url.pathname.startsWith('/api/pesquisa-preco/')) {
       return handlePesquisaPreco(url);
     }

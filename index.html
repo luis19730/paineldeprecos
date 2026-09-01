@@ -270,6 +270,8 @@
   }
   .stat-cell.highlight{background:var(--seal);}
   .stat-cell.highlight .value, .stat-cell.highlight .label{color:var(--seal-soft);}
+  .stat-cell.market{background:#eef6ec;border-left:3px solid #3c763d;}
+  .stat-cell.market .label{font-size:0.62rem;}
 
   .warning{
     margin-top:1rem;
@@ -493,6 +495,7 @@
         <div class="stat-cell highlight"><span class="label">mediana (referência)</span><span class="value" id="stat-mediana">—</span></div>
         <div class="stat-cell"><span class="label">desvio padrão</span><span class="value" id="stat-desvio">—</span></div>
         <div class="stat-cell"><span class="label">coef. de variação</span><span class="value" id="stat-cv">—</span></div>
+        <div class="stat-cell market" id="market-cell" style="display:none;"><span class="label">referência de mercado externa</span><span class="value" id="stat-mercado">—</span></div>
       </div>
 
       <div class="field-grid" style="margin-top:1.1rem;max-width:340px;">
@@ -545,6 +548,7 @@
   const precos = [];
   const orcamento = [];
   let ultimoCalculo = null;
+  let mercado = null;
 
   const fmtBRL = v => v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
   const fonteLabel = {
@@ -688,6 +692,28 @@
     renderPrecos();
   });
 
+  // Busca a mediana de mercado agregada (agregação de várias páginas via worker,
+  // rota /mercado) para servir como referência externa de comparação de preço.
+  async function fetchMercado(tipo, codigo){
+    const rota = tipo === 'material' ? 'material' : 'servico';
+    const url = `${API_BASE_URL}/api/pesquisa-preco/${rota}/mercado?codigo=${encodeURIComponent(codigo)}`;
+    const marketCell = document.getElementById('market-cell');
+    try {
+      const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!resp.ok) throw new Error('status ' + resp.status);
+      const data = await resp.json();
+      if (data && data.medianaMercado != null) {
+        mercado = data;
+        document.getElementById('stat-mercado').textContent = fmtBRL(data.medianaMercado);
+        marketCell.style.display = 'block';
+        if (typeof renderSobrepreco === 'function') renderSobrepreco();
+      }
+    } catch (e) {
+      mercado = null;
+      marketCell.style.display = 'none';
+    }
+  }
+
   // Busca real na API oficial do Compras.gov.br — Módulo Pesquisa de Preço.
   // Documentação: https://www.gov.br/compras/pt-br/acesso-a-informacao/manuais/manual-dados-abertos/manual-api-compras.pdf
   // Nenhum dado é inventado: se a API falhar ou não retornar registros, isso é
@@ -750,6 +776,7 @@
           renderPrecos();
           apiStatus.innerHTML = '<div class="ok-note">' + novos.length + ' preço(s) carregado(s) da API oficial para o código '
             + codigo + '.</div>';
+          fetchMercado(tipo, codigo);
         }
       }
     } catch (err) {
@@ -825,25 +852,7 @@
     const teto = mediana * (1 + limiteSobrepreco);
     const sobrepreco = precos.filter((p, i) => !outlierSet.has(i) && p.valor > teto);
 
-    const sobreprecoEl = document.getElementById('sobrepreco-result');
-    let sobreprecoHTML = '';
-    if (valores.length >= 2 && mediana > 0) {
-      const pct = (limiteSobrepreco * 100).toFixed(0);
-      if (sobrepreco.length) {
-        const txt = sobrepreco
-          .map(sp => (sp.orgao || sp.fonte) + ' — ' + fmtBRL(sp.valor))
-          .join('; ');
-        sobreprecoHTML = '<div class="warning">⚠️ <strong>Possível sobrepreço:</strong> ' + sobrepreco.length
-          + ' fonte(s) acima do teto de ' + fmtBRL(teto) + ' (mediana +' + pct + '%): ' + txt
-          + '. Revisar antes de usar como referência.</div>';
-      } else {
-        sobreprecoHTML = '<div class="ok-note">Nenhuma fonte acima do teto de ' + fmtBRL(teto)
-          + ' (mediana +' + pct + '%). Sem indício de sobrepreço.</div>';
-      }
-    } else {
-      sobreprecoHTML = '';
-    }
-    sobreprecoEl.innerHTML = sobreprecoHTML;
+    renderSobrepreco(mediana, limiteSobrepreco, teto, sobrepreco, outlierSet);
 
     ultimoCalculo = {
       codigo: document.getElementById('item-codigo').value.trim(),
@@ -859,10 +868,57 @@
       tetoSobrepreco: teto,
       temSobrepreco: sobrepreco.length > 0,
       qtdSobrepreco: sobrepreco.length,
+      referenciaMercado: mercado ? mercado.medianaMercado : null,
+      mercadoItens: mercado ? mercado.totalRegistros : null,
       fontes: precos.map((p,i) => ({...p, descartado: outlierSet.has(i)}))
     };
     document.getElementById('add-to-budget-btn').style.display = 'inline-block';
   });
+
+  // Re-render da análise de sobrepreço, comparando cada fonte tanto contra a
+  // mediana da amostra quanto contra a mediana de mercado externa (quando
+  // disponível). Chamada ao calcular e de novo quando a referência de mercado
+  // termina de carregar.
+  function renderSobrepreco(mediana, limiteSobrepreco, teto, sobrepreco, outlierSet){
+    const limite = limiteSobrepreco ?? (parseFloat(document.getElementById('sobrepreco-limite').value) || 25) / 100;
+    const baseMediana = mediana ?? (ultimoCalculo ? ultimoCalculo.mediana : null);
+    const baseTeto = teto ?? (baseMediana != null ? baseMediana * (1 + limite) : null);
+    const baseSobrepreco = sobrepreco || [];
+
+    const mercadoMediana = mercado ? mercado.medianaMercado : null;
+    let mercadoTeto = null;
+    let acimaMercado = [];
+    if (mercadoMediana != null && baseSobrepreco.length) {
+      mercadoTeto = mercadoMediana * (1 + limite);
+      acimaMercado = baseSobrepreco.filter(p => p.valor > mercadoTeto);
+    }
+
+    const sobreprecoEl = document.getElementById('sobrepreco-result');
+    let html = '';
+    if (baseMediana != null && baseMediana > 0) {
+      const pct = (limite * 100).toFixed(0);
+      if (baseSobrepreco.length) {
+        const txt = baseSobrepreco
+          .map(sp => (sp.orgao || sp.fonte) + ' — ' + fmtBRL(sp.valor))
+          .join('; ');
+        html = '<div class="warning">⚠️ <strong>Possível sobrepreço:</strong> ' + baseSobrepreco.length
+          + ' fonte(s) acima do teto de ' + fmtBRL(baseTeto) + ' (mediana +' + pct + '%): ' + txt
+          + '. Revisar antes de usar como referência.</div>';
+      } else {
+        html = '<div class="ok-note">Nenhuma fonte acima do teto de ' + fmtBRL(baseTeto)
+          + ' (mediana +' + pct + '%). Sem indício de sobrepreço.</div>';
+      }
+      if (mercadoTeto != null && acimaMercado.length) {
+        const txt2 = acimaMercado
+          .map(sp => (sp.orgao || sp.fonte) + ' — ' + fmtBRL(sp.valor))
+          .join('; ');
+        html = '<div class="warning">⚠️ <strong>Acima do mercado externo:</strong> ' + acimaMercado.length
+          + ' fonte(s) supera(m) a referência externa de ' + fmtBRL(mercadoMediana) + ' (mediana de mercado +'
+          + pct + '% = ' + fmtBRL(mercadoTeto) + '): ' + txt2 + '.</div>' + html;
+      }
+    }
+    sobreprecoEl.innerHTML = html;
+  }
 
   function renderBudget(){
     const list = document.getElementById('budget-list');
@@ -967,13 +1023,15 @@
         'Fontes Distintas (Auditoria)': fontesDistintas,
         'Atende mínimo de 3 fontes (Art. 23)': atendeMinimo ? 'SIM' : 'NÃO',
         'Possível Soberpreço (acima do limite configurado)': temSobrepreco ? 'SIM — revisar' : 'NÃO',
+        'Referência de Mercado Externo (mediana, R$)': item.referenciaMercado != null ? item.referenciaMercado : 'N/D',
+        'Itens no Mercado Externo': item.mercadoItens != null ? item.mercadoItens : 'N/D',
         'Coef. de Variação (%)': (item.cv !== undefined ? item.cv : 0).toFixed(1)
       };
     });
     const wsOrc = XLSX.utils.json_to_sheet(orcamentoRows);
     // Larguras das colunas.
     wsOrc['!cols'] = [
-      {wch:45},{wch:15},{wch:10},{wch:11},{wch:22},{wch:16},{wch:14},{wch:16},{wch:28},{wch:32},{wch:16}
+      {wch:45},{wch:15},{wch:10},{wch:11},{wch:22},{wch:16},{wch:14},{wch:16},{wch:28},{wch:32},{wch:24},{wch:16},{wch:16}
     ];
     XLSX.utils.book_append_sheet(wb, wsOrc, 'Orçamento');
 
@@ -1011,6 +1069,7 @@
       { 'Metodologia aplicada': '- Coeficiente de variação: mede a dispersão relativa; valores acima de 25% indicam revisão das fontes.' },
       { 'Metodologia aplicada': '- Conformidade: cada item indica se atende o mínimo de 3 fontes distintas exigido pelo Art. 23.' },
       { 'Metodologia aplicada': '- Sobrepreço: sinalizados os itens em que alguma fonte válida ultrapassa o TETO = mediana × (1 + limite do gestor). O limite é configurável e foi registrado na aba "Orçamento" (coluna "Possível Sobrepreço").' },
+      { 'Metodologia aplicada': '- Referência de mercado externo: quando disponível, o sistema agrega múltiplas páginas da base oficial e calcula a MEDIANA de mercado (amostra externa) para servir como referência de comparação adicional, reforçando a rastreabilidade e o controle de sobrepreço.' },
       { 'Metodologia aplicada': '' },
       { 'Metodologia aplicada': 'RASTREABILIDADE' },
       { 'Metodologia aplicada': 'Cada preço coletado possui origem registrada (fonte, órgão/fornecedor, UF, data e valor). A aba "Memória de Cálculo" documenta individualmente as cotações utilizadas e as descartadas, permitindo auditoria e controle da Administração Pública.' },
