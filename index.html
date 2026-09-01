@@ -183,16 +183,24 @@
     border-bottom:1px solid var(--rule);
     font-size:0.8rem;
     line-height:1.35;
+    display:flex;
+    align-items:flex-start;
+    gap:0.55rem;
   }
   .autocomplete .sug-list li:last-child{border-bottom:none;}
   .autocomplete .sug-list li:hover,
   .autocomplete .sug-list li.active{background:var(--seal-soft);}
   .autocomplete .sug-list .sug-code{
     font-family:var(--mono);
-    font-size:0.68rem;
-    color:var(--gold);
-    display:block;
-    margin-bottom:0.1rem;
+    font-size:0.78rem;
+    font-weight:700;
+    color:var(--ink);
+    background:var(--rule);
+    border-radius:2px;
+    padding:0.08rem 0.4rem;
+    white-space:nowrap;
+    flex-shrink:0;
+    line-height:1.5;
   }
   .autocomplete .sug-empty{
     padding:0.5rem 0.6rem;
@@ -591,8 +599,8 @@
     }
     descSuggest.innerHTML = '<ul class="sug-list">' + suggestItems.map((it, i) =>
       '<li data-i="' + i + '" class="' + (i === suggestIndex ? 'active' : '') + '">' +
-        '<span class="sug-code">' + it.codigo_item + '</span>' +
-        '<span>' + it.descricao_item + '</span>' +
+        '<span class="sug-code">' + String(it.codigo_item).padStart(6, '0') + '</span>' +
+        '<span class="sug-desc">' + it.descricao_item + '</span>' +
       '</li>'
     ).join('') + '</ul>';
     // Clicar em uma sugestão seleciona o item.
