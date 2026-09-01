@@ -812,6 +812,10 @@
       unidade: document.getElementById('item-unidade').value.trim(),
       quantidade: parseFloat(document.getElementById('item-qtd').value) || 1,
       media, mediana, desvio, cv, n,
+      // Conformidade (auditoria): fontes válidas usadas no cálculo e indicação
+      // se atende o mínimo de 3 fontes distintas da Lei 14.133/2021, Art. 23.
+      fontesValidas: precos.filter((p,i) => !outlierSet.has(i)).length,
+      fontesDistintas: new Set(precos.map(p => p.orgao || p.fonte)).size,
       fontes: precos.map((p,i) => ({...p, descartado: outlierSet.has(i)}))
     };
     document.getElementById('add-to-budget-btn').style.display = 'inline-block';
@@ -836,8 +840,13 @@
       total += subtotal;
       const div = document.createElement('div');
       div.className = 'budget-item';
+      const fontesValidas = (item.fontes || []).filter(f => !f.descartado);
+      const nFontes = item.fontesValidas !== undefined ? item.fontesValidas : fontesValidas.length;
+      const badge = nFontes >= 3
+        ? '<span class="stamp" style="border-color:var(--ok);color:var(--ok);transform:none;margin-left:0.4rem;">' + nFontes + ' fontes ✓</span>'
+        : '<span class="stamp">' + nFontes + ' fontes</span>';
       div.innerHTML = `
-        <div class="name">${item.descricao || item.codigo || 'Item sem descrição'}</div>
+        <div class="name">${item.descricao || item.codigo || 'Item sem descrição'}${badge}</div>
         <div class="meta"><span>${item.quantidade} × ${fmtBRL(item.mediana)}</span><span>${fmtBRL(subtotal)}</span></div>
         <div class="meta"><button data-i="${i}" style="background:none;border:none;color:inherit;opacity:0.75;cursor:pointer;font-family:var(--mono);font-size:0.7rem;text-decoration:underline;padding:0;">remover</button></div>
       `;
@@ -893,26 +902,41 @@
 
     const wb = XLSX.utils.book_new();
 
-    const orcamentoRows = orcamento.map(item => ({
-      'Item': item.descricao,
-      'Código CATMAT/CATSER': item.codigo,
-      'Unidade': item.unidade,
-      'Quantidade': item.quantidade,
-      'Preço Unitário de Referência (mediana)': item.mediana,
-      'Preço Total': item.mediana * item.quantidade,
-      'Nº de Fontes Usadas': item.fontes.filter(f => !f.descartado).length,
-      'Coef. de Variação (%)': item.cv.toFixed(1)
-    }));
+    // Aba 1 — Orçamento (com critérios de conformidade da Lei 14.133/2021 Art. 23).
+    const orcamentoRows = orcamento.map(item => {
+      const fontesValidas = item.fontes ? item.fontes.filter(f => !f.descartado) : [];
+      const fontesDistintas = item.fontesValidas !== undefined
+        ? item.fontesValidas
+        : fontesValidas.length;
+      const atendeMinimo = fontesDistintas >= 3;
+      return {
+        'Item': item.descricao,
+        'Código CATMAT/CATSER': item.codigo,
+        'Unidade': item.unidade,
+        'Quantidade': item.quantidade,
+        'Preço Unitário de Referência (mediana)': item.mediana,
+        'Preço Total': item.mediana * item.quantidade,
+        'Nº de Fontes Usadas': fontesDistintas,
+        'Fontes Distintas (Auditoria)': fontesDistintas,
+        'Atende mínimo de 3 fontes (Art. 23)': atendeMinimo ? 'SIM' : 'NÃO',
+        'Coef. de Variação (%)': (item.cv !== undefined ? item.cv : 0).toFixed(1)
+      };
+    });
     const wsOrc = XLSX.utils.json_to_sheet(orcamentoRows);
+    // Larguras das colunas.
+    wsOrc['!cols'] = [
+      {wch:45},{wch:15},{wch:10},{wch:11},{wch:22},{wch:16},{wch:14},{wch:16},{wch:28},{wch:16}
+    ];
     XLSX.utils.book_append_sheet(wb, wsOrc, 'Orçamento');
 
+    // Aba 2 — Memória de Cálculo (rastreabilidade por fonte).
     const memRows = [];
     orcamento.forEach(item => {
-      item.fontes.forEach(f => {
+      (item.fontes || []).forEach(f => {
         memRows.push({
           'Item': item.descricao,
           'Código': item.codigo,
-          'Fonte': fonteLabel[f.fonte],
+          'Fonte': fonteLabel[f.fonte] || f.fonte,
           'Órgão/Fornecedor': f.orgao,
           'UF': f.uf,
           'Data': f.data,
@@ -924,13 +948,29 @@
     const wsMem = XLSX.utils.json_to_sheet(memRows);
     XLSX.utils.book_append_sheet(wb, wsMem, 'Memória de Cálculo');
 
+    // Aba 3 — Metodologia (base legal completa para auditoria).
     const metodologia = [
-      { 'Metodologia aplicada': 'Pesquisa de preços conforme Lei 14.133/2021, Art. 23, e IN SEGES/ME nº 65/2021.' },
-      { 'Metodologia aplicada': 'Preço de referência adotado: mediana das cotações válidas.' },
-      { 'Metodologia aplicada': 'Descarte de outliers: método do intervalo interquartil (IQR), limites Q1-1,5×IQR e Q3+1,5×IQR.' },
-      { 'Metodologia aplicada': 'Mínimo recomendado de 3 fontes distintas por item.' },
+      { 'Metodologia aplicada': 'FUNDAMENTAÇÃO LEGAL DA PESQUISA DE PREÇOS' },
+      { 'Metodologia aplicada': '' },
+      { 'Metodologia aplicada': '1. Lei nº 14.133/2021, Art. 23 — A pesquisa de preços será materializada em documento que conterá, no mínimo, preferencialmente 3 (três) fontes de referência, tais como: Painel de Preços, contratações similares de outros entes públicos (PNCP), pesquisa direta com fornecedores e atas de registro de preços.' },
+      { 'Metodologia aplicada': '' },
+      { 'Metodologia aplicada': '2. IN SEGES/ME nº 65/2021 — Disciplina o procedimento administrativo para a realização de pesquisa de preços. Estabelece o tratamento estatístico: cálculo de média/mediana, descarte de valores atípicos (outliers) e utilização da mediana quando houver grande dispersão dos preços coletados.' },
+      { 'Metodologia aplicada': '' },
+      { 'Metodologia aplicada': 'MÉTODO UTILIZADO NESTE ORÇAMENTO' },
+      { 'Metodologia aplicada': '' },
+      { 'Metodologia aplicada': '- Preço de referência: MEDIANA das cotações válidas (adotada por robustez frente a valores discrepantes).' },
+      { 'Metodologia aplicada': '- Descarte de outliers: método do intervalo interquartil (IQR). Considerados outliers os valores fora de Q1 - 1,5×IQR e Q3 + 1,5×IQR.' },
+      { 'Metodologia aplicada': '- Coeficiente de variação: mede a dispersão relativa; valores acima de 25% indicam revisão das fontes.' },
+      { 'Metodologia aplicada': '- Conformidade: cada item indica se atende o mínimo de 3 fontes distintas exigido pelo Art. 23.' },
+      { 'Metodologia aplicada': '' },
+      { 'Metodologia aplicada': 'RASTREABILIDADE' },
+      { 'Metodologia aplicada': 'Cada preço coletado possui origem registrada (fonte, órgão/fornecedor, UF, data e valor). A aba "Memória de Cálculo" documenta individualmente as cotações utilizadas e as descartadas, permitindo auditoria e controle da Administração Pública.' },
+      { 'Metodologia aplicada': '' },
+      { 'Metodologia aplicada': 'ATENÇÃO' },
+      { 'Metodologia aplicada': 'A conformidade com o mínimo de 3 fontes depende da disponibilidade de dados públicos para o código informado. Itens marcados como "NÃO" no campo "Atende mínimo de 3 fontes" devem ter cotações complementares antes de instruir o processo.' },
     ];
     const wsMet = XLSX.utils.json_to_sheet(metodologia);
+    wsMet['!cols'] = [{wch:110}];
     XLSX.utils.book_append_sheet(wb, wsMet, 'Metodologia');
 
     XLSX.writeFile(wb, 'orcamento-padronizado.xlsx');
