@@ -355,6 +355,56 @@ async function handleItemCompleto(url) {
   );
 }
 
+/** Endpoint CSV no padrão oficial do Painel de Preços (exporta o CSV da API). */
+async function handlePesquisaPrecoCSV(url) {
+  const match = url.pathname.match(/^\/api\/pesquisa-preco\/(material|servico)\/csv$/);
+  if (!match) return json(JSON.stringify({ erro: 'Rota inválida.' }), 404);
+  const tipo = match[1];
+  const codigo = (url.searchParams.get('codigo') || '').trim();
+  if (!codigo) return json(JSON.stringify({ erro: 'Parâmetro "codigo" é obrigatório.' }), 400);
+
+  let apiUrl;
+  if (tipo === 'material') {
+    apiUrl =
+      DADOS_ABERTOS_BASE_URL +
+      '/modulo-pesquisa-preco/1.1_consultarMaterial_CSV' +
+      '?tipo=codigoItemCatalogo&codigo=' +
+      encodeURIComponent(codigo);
+  } else {
+    apiUrl =
+      DADOS_ABERTOS_BASE_URL +
+      '/modulo-pesquisa-preco/3.1_consultarServico_CSV' +
+      '?codigoItemCatalogo=' +
+      encodeURIComponent(codigo);
+  }
+
+  try {
+    const resp = await fetch(apiUrl, {
+      headers: { accept: 'text/csv', 'user-agent': 'painel-precos-licitacoes/0.1' },
+    });
+    if (!resp.ok) {
+      return json(
+        JSON.stringify({ erro: `A API do Compras.gov.br respondeu com status ${resp.status}.` }),
+        resp.status
+      );
+    }
+    const body = await resp.text();
+    return new Response(body, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="painel-preco-${tipo}-${codigo}.csv"`,
+        ...CORS_HEADERS,
+      },
+    });
+  } catch (err) {
+    return json(
+      JSON.stringify({ erro: 'Falha ao consultar o CSV oficial.', detalhe: String(err && err.message) }),
+      502
+    );
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -368,6 +418,9 @@ export default {
 
     if (url.pathname.match(/^\/api\/pesquisa-preco\/(material|servico)\/mercado$/)) {
       return handleMercado(url);
+    }
+    if (url.pathname.match(/^\/api\/pesquisa-preco\/(material|servico)\/csv$/)) {
+      return handlePesquisaPrecoCSV(url);
     }
     if (url.pathname.startsWith('/api/pesquisa-preco/')) {
       return handlePesquisaPreco(url);

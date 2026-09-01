@@ -448,6 +448,12 @@
       </div>
 
       <div id="api-status" style="font-size:0.85rem;margin-top:1rem;"></div>
+      <div id="export-painel-wrap" style="display:none;margin-top:0.9rem;">
+        <button class="btn" id="export-painel-btn">Exportar planilha no padrão do Painel de Preços (.csv)</button>
+        <div class="hint" style="font-size:0.72rem;color:var(--ink-soft);font-family:var(--mono);margin-top:0.3rem;">
+          Colunas oficiais do Painel de Preços (UASG, órgão, UF, município, fornecedor, unidade, quantidade, preço, data, modalidade…).
+        </div>
+      </div>
 
       <table class="ledger" id="precos-table" style="display:none;">
         <thead>
@@ -839,6 +845,9 @@
           apiStatus.innerHTML = '<div class="ok-note">' + novos.length + ' preço(s) carregado(s) da API oficial para o código '
             + codigo + '.</div>';
           fetchMercado(tipo, codigo);
+          ultimoCodigoBusca = codigo;
+          ultimoTipoBusca = tipo;
+          document.getElementById('export-painel-wrap').style.display = 'block';
         }
       }
     } catch (err) {
@@ -1059,6 +1068,38 @@
     if (!confirm('Limpar todos os dados desta sessão (preços coletados e orçamento)?')) return;
     localStorage.removeItem('painel-precos-orcamento');
     location.reload();
+  });
+
+  // Exportar planilha no padrão oficial do Painel de Preços (CSV direto da API).
+  let ultimoCodigoBusca = null;
+  let ultimoTipoBusca = 'material';
+  document.getElementById('export-painel-btn').addEventListener('click', async () => {
+    if (!ultimoCodigoBusca) { alert('Busque preços na API antes de exportar.'); return; }
+    const btn = document.getElementById('export-painel-btn');
+    btn.disabled = true;
+    const rotuloOriginal = btn.textContent;
+    btn.textContent = 'Baixando…';
+    try {
+      const rota = ultimoTipoBusca === 'material' ? 'material' : 'servico';
+      const resp = await fetch(
+        API_BASE_URL + '/api/pesquisa-preco/' + rota + '/csv?codigo=' + encodeURIComponent(ultimoCodigoBusca)
+      );
+      if (!resp.ok) throw new Error('status ' + resp.status);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'painel-preco-' + rota + '-' + ultimoCodigoBusca + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Não foi possível baixar a planilha no padrão do Painel de Preços: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = rotuloOriginal;
+    }
   });
 
   document.getElementById('export-xlsx-btn').addEventListener('click', () => {
