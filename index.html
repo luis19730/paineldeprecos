@@ -737,6 +737,7 @@
 
       <div id="export-painel-wrap" style="display:none;margin-top:0.9rem;">
         <button class="btn" id="export-painel-btn">Exportar planilha no padrão do Painel de Preços (.csv)</button>
+        <button class="btn ghost" id="export-analitico-btn" style="margin-left:0.5rem;">Exportar dados coletados (.csv)</button>
         <div class="hint" style="font-size:0.72rem;color:var(--ink-soft);font-family:var(--mono);margin-top:0.3rem;">
           Colunas oficiais do Painel de Preços (UASG, órgão, UF, município, fornecedor, unidade, quantidade, preço, data, modalidade…).
         </div>
@@ -1740,6 +1741,44 @@
     }
   });
 
+  // Exporta os dados coletados na sessão (incluindo cotações manuais e a
+  // situação de cada registro na análise) como CSV com BOM para Excel.
+  document.getElementById('export-analitico-btn').addEventListener('click', () => {
+    if (!precos.length) { alert('Não há dados coletados para exportar. Busque preços primeiro.'); return; }
+    const escapa = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const colunas = ['Fonte', 'Órgão/UASG', 'Fornecedor', 'Município', 'Modalidade', 'Unidade', 'Quantidade', 'UF', 'Data', 'Valor (R$)', 'Situação na análise'];
+    const linhas = [colunas.join(';')];
+    const jaCalculou = outlierSetAtual != null;
+    precos.forEach((p, i) => {
+      const situacao = jaCalculou
+        ? (outlierSetAtual.has(i) ? 'Descartado (outlier)' : 'Usado no cálculo')
+        : '—';
+      linhas.push([
+        escapa(fonteLabel[p.fonte] || p.fonte),
+        escapa(p.orgao),
+        escapa(p.fornecedor),
+        escapa(p.municipio),
+        escapa(p.modalidade),
+        escapa(p.unidade),
+        escapa(p.quantidade),
+        escapa(p.uf),
+        escapa(p.data),
+        escapa(p.valor != null ? p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''),
+        escapa(situacao)
+      ].join(';'));
+    });
+    const csv = '\uFEFF' + linhas.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'dados-coletados-' + (ultimoCodigoBusca || 'sessao') + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
   document.getElementById('export-xlsx-btn').addEventListener('click', () => {
     if (typeof XLSX === 'undefined') {
       alert('A biblioteca de Excel não carregou (bloqueio de CDN ou rede). Verifique a conexão e tente novamente.');
@@ -1847,14 +1886,14 @@
     const dec = 2; // casas decimais p/ largura automática
 
     // ---- Aba 1 — Orçamento (critérios de conformidade da Lei 14.133/2021 Art. 23). ----
-    const cabOrc = [
+const cabOrc = [
       'Item', 'Código CATMAT/CATSER', 'Unidade', 'Quantidade',
       'Preço Unitário de Referência (mediana)', 'Preço Total',
       'Nº de Fontes Usadas', 'Fontes Distintas (Auditoria)',
       'Atende mínimo de 3 fontes (Art. 23)',
       'Possível Sobrepreço (acima do limite configurado)',
       'Referência de Mercado Externo (mediana, R$)', 'Itens no Mercado Externo',
-      'Coef. de Variação (%)'
+      'Coef. de Variação (%)', 'Média (R$)', 'Incluído em'
     ];
     const aoaOrc = [cabOrc.map(celHeader)];
     orcamento.forEach(item => {
@@ -1877,7 +1916,9 @@
         celTexto(temSobrepreco ? 'SIM — revisar' : 'NÃO', true),
         celNum(item.referenciaMercado != null ? item.referenciaMercado : null, FMT_MOEDA),
         celNum(item.mercadoItens != null ? item.mercadoItens : null, FMT_INT),
-        celNum(item.cv !== undefined ? item.cv : 0, '0.0"%"')
+        celNum(item.cv !== undefined ? item.cv : 0, '0.0"%"'),
+        celNum(item.media != null ? item.media : null, FMT_MOEDA),
+        celTexto(item.adicionadoEm ? new Date(item.adicionadoEm).toLocaleDateString('pt-BR') : '', true)
       ]);
     });
     estendeZebra(aoaOrc);
@@ -1888,6 +1929,7 @@
     // ---- Aba 2 — Memória de Cálculo (rastreabilidade por fonte). ----
     const cabMem = [
       'Item', 'Código', 'Fonte', 'Órgão/Fornecedor', 'UF', 'Data',
+      'Fornecedor', 'Município', 'Modalidade', 'Unidade', 'Quantidade',
       'Valor Coletado (R$)', 'Usado no Cálculo'
     ];
     const aoaMem = [cabMem.map(celHeader)];
@@ -1900,6 +1942,11 @@
           celTexto(f.orgao),
           celTexto(f.uf, true),
           celTexto(f.data, true),
+          celTexto(f.fornecedor),
+          celTexto(f.municipio),
+          celTexto(f.modalidade),
+          celTexto(f.unidade, true),
+          celNum(f.quantidade != null ? f.quantidade : null, '#,##0.00'),
           celNum(f.valor, FMT_MOEDA),
           celTexto(f.descartado ? 'Não (outlier)' : 'Sim', true)
         ]);
@@ -1933,6 +1980,34 @@
       { 'Metodologia aplicada': 'ATENÇÃO' },
       { 'Metodologia aplicada': 'A conformidade com o mínimo de 3 fontes depende da disponibilidade de dados públicos para o código informado. Itens marcados como "NÃO" no campo "Atende mínimo de 3 fontes" devem ter cotações complementares antes de instruir o processo.' },
     ];
+    const resumoItems = [];
+    orcamento.forEach((item, idx) => {
+      const nFontes = item.fontesValidas !== undefined
+        ? item.fontesValidas
+        : (item.fontes || []).filter(f => !f.descartado).length;
+      const cv = item.cv != null ? item.cv.toFixed(1) + '%' : 'n/d';
+      const outlierCount = (item.fontes || []).filter(f => f.descartado).length;
+      const medianaTxt = item.mediana != null ? fmtBRL(item.mediana) : 'n/d';
+      const tetoTxt = item.tetoSobrepreco != null ? fmtBRL(item.tetoSobrepreco) : 'n/d';
+      const limitePct = item.limiteSobrepreco != null ? Math.round(item.limiteSobrepreco * 100) : 25;
+      const mercadoTxt = item.referenciaMercado != null
+        ? ' · Referência de mercado externo: ' + fmtBRL(item.referenciaMercado)
+        : ' · Sem referência de mercado externo';
+      const incluidoTxt = item.adicionadoEm
+        ? ' · Incluído em ' + new Date(item.adicionadoEm).toLocaleDateString('pt-BR')
+        : '';
+      resumoItems.push({ 'Metodologia aplicada': 'Item ' + (idx + 1) + ' — ' + (item.descricao || item.codigo || 'sem descrição') + ' (' + (item.codigo || 'sem código') + ')' });
+      resumoItems.push({ 'Metodologia aplicada': '  Preço de referência (mediana): ' + medianaTxt + ' · Fontes válidas: ' + nFontes + ' · CV: ' + cv + ' · Outliers descartados: ' + outlierCount + (item.temSobrepreco ? ' · ⚠ possível sobrepreço' : '') });
+      resumoItems.push({ 'Metodologia aplicada': '  Teto de sobrepreço (mediana × ' + limitePct + '%): ' + tetoTxt + mercadoTxt });
+      resumoItems.push({ 'Metodologia aplicada': (nFontes >= 3 ? '  ✓ Conforme' : '  ✗ NÃO conforme') + ' — mínimo de 3 fontes (Lei 14.133/2021, Art. 23).' + incluidoTxt });
+    });
+    metodologia.push(
+      { 'Metodologia aplicada': '' },
+      { 'Metodologia aplicada': 'RESUMO DA ANÁLISE POR ITEM (gerado automaticamente na exportação)' },
+      ...resumoItems,
+      { 'Metodologia aplicada': '' },
+      { 'Metodologia aplicada': 'Documento gerado em ' + new Date().toLocaleString('pt-BR') + ' pelo Painel de Preços Inteligente. As fórmulas, limites e valores acima reproduzem exatamente o que foi exibido na memória de cálculo desta sessão.' }
+    );
     const aoaMet = [[celHeader('Metodologia aplicada')]].concat(
       metodologia.map(m => [celTexto(m['Metodologia aplicada'])])
     );
