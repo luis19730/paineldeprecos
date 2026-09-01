@@ -7,7 +7,24 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+<script>
+// Carrega a biblioteca de exportação Excel com fallback entre CDNs.
+(function(){
+  var fontes = [
+    'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js',
+    'https://unpkg.com/xlsx-js-style@1.2.0/dist/xlsx.min.js'
+  ];
+  function tentar(i){
+    if (i >= fontes.length) return;
+    var s = document.createElement('script');
+    s.src = fontes[i];
+    s.onload = function(){ window._xlsxLib = true; };
+    s.onerror = function(){ s.remove(); tentar(i + 1); };
+    document.head.appendChild(s);
+  }
+  tentar(0);
+})();
+</script>
 <style>
   :root{
     --paper:#EEE8D8;
@@ -1113,6 +1130,10 @@
   });
 
   document.getElementById('export-xlsx-btn').addEventListener('click', () => {
+    if (typeof XLSX === 'undefined') {
+      alert('A biblioteca de Excel não carregou (bloqueio de CDN ou rede). Verifique a conexão e tente novamente.');
+      return;
+    }
     if (!orcamento.length) { alert('Adicione ao menos um item ao orçamento antes de exportar.'); return; }
 
     // ---- Helpers de formatação/estilo do Excel ----
