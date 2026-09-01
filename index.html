@@ -498,6 +498,78 @@
     color:var(--ink-soft);
   }
 
+  /* Resumo do resultado da pesquisa (cards) */
+  .result-title{
+    display:flex;
+    align-items:center;
+    gap:0.6rem;
+    margin-top:1.3rem;
+    margin-bottom:0.2rem;
+  }
+  .result-title h3{
+    font-family:var(--display);
+    font-size:1rem;
+    font-weight:700;
+    margin:0;
+    color:var(--ink);
+  }
+  .result-meta{
+    font-family:var(--mono);
+    font-size:0.72rem;
+    color:var(--ink-soft);
+    margin:0 0 0.8rem;
+  }
+  .result-summary{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+    gap:0.7rem;
+  }
+  .result-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    padding:0.85rem 1rem;
+  }
+  .result-card .k{
+    display:block;
+    font-size:0.68rem;
+    font-weight:600;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    letter-spacing:0.02em;
+    margin-bottom:0.25rem;
+  }
+  .result-card .v{
+    display:block;
+    font-family:var(--display);
+    font-size:1.25rem;
+    font-weight:700;
+    color:var(--ink);
+    font-variant-numeric:tabular-nums;
+  }
+  .result-card.highlight{background:linear-gradient(135deg,var(--primary),var(--accent));border-color:transparent;}
+  .result-card.highlight .k, .result-card.highlight .v{color:#fff;}
+
+  /* Alertas de qualidade */
+  .alertas{display:flex;flex-direction:column;gap:0.5rem;margin-top:1rem;}
+  .alerta{
+    display:flex;align-items:flex-start;gap:0.6rem;
+    padding:0.65rem 0.85rem;
+    border-radius:var(--radius-sm);
+    border:1px solid var(--border);
+    background:var(--surface);
+    font-size:0.84rem;
+    color:var(--ink);
+  }
+  .alerta .tag{font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.02em;flex-shrink:0;}
+  .alerta.boa{background:var(--ok-soft);border-color:transparent;} .alerta.boa .tag{color:var(--ok);}
+  .alerta.atencao{background:#fef3c7;border-color:transparent;} .alerta.atencao .tag{color:#b45309;}
+  .alerta.pouca{background:#ffedd5;border-color:transparent;} .alerta.pouca .tag{color:#c2410c;}
+  .alerta.critica{background:var(--alert-soft);border-color:transparent;} .alerta.critica .tag{color:var(--alert);}
+  .alerta .msg{flex:1;}
+  .alerta .pct{font-family:var(--mono);font-size:0.78rem;color:var(--ink-soft);flex-shrink:0;}
+
+
 </style>
 </head>
 <body>
@@ -573,6 +645,14 @@
       </div>
 
       <div id="api-status" style="font-size:0.85rem;margin-top:1rem;"></div>
+
+      <div id="result-panel" style="display:none;">
+        <div class="result-title"><h3>Resultado da pesquisa</h3></div>
+        <p class="result-meta" id="result-meta"></p>
+        <div class="result-summary" id="result-summary"></div>
+        <div class="alertas" id="result-alertas"></div>
+      </div>
+
       <div id="export-painel-wrap" style="display:none;margin-top:0.9rem;">
         <button class="btn" id="export-painel-btn">Exportar planilha no padrão do Painel de Preços (.csv)</button>
         <div class="hint" style="font-size:0.72rem;color:var(--ink-soft);font-family:var(--mono);margin-top:0.3rem;">
@@ -873,8 +953,94 @@
         document.getElementById('add-to-budget-btn').style.display = 'none';
         document.getElementById('stat-warning').innerHTML = '';
         renderPrecos();
+        renderResultado();
       });
     });
+  }
+
+  // Painel "Resultado da pesquisa" — cards e alertas de qualidade (FASE 5).
+  function renderResultado(novos, codigo, tipo){
+    const panel = document.getElementById('result-panel');
+    if (!panel) return;
+    if (!precos.length) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+
+    const valores = precos.map(p => p.valor).filter(v => Number.isFinite(v) && v > 0);
+    const soma = valores.reduce((a, b) => a + b, 0);
+    const media = valores.length ? soma / valores.length : 0;
+    const sorted = [...valores].sort((a, b) => a - b);
+    const menor = sorted.length ? sorted[0] : null;
+    const maior = sorted.length ? sorted[sorted.length - 1] : null;
+    const mediana = quartil(sorted, 0.5);
+
+    // Outliers pela mesma lógica do cálculo (IQR — função quartil do escopo).
+    let nOutliers = 0;
+    if (valores.length >= 4) {
+      const q1 = quartil(sorted, 0.25);
+      const q3 = quartil(sorted, 0.75);
+      const iqr = q3 - q1;
+      const low = q1 - 1.5 * iqr;
+      const high = q3 + 1.5 * iqr;
+      nOutliers = valores.filter(v => v < low || v > high).length;
+    }
+
+    const card = (k, v, extra) => '<div class="result-card' + (extra || '') + '"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>';
+
+    document.getElementById('result-meta').textContent = (tipo === 'servico' ? 'CATSER ' : 'CATMAT ') + (codigo || '') +
+      ' · ' + precos.length + ' registro(s) carregado(s) · fonte: Compras.gov.br — Módulo Pesquisa de Preço';
+    document.getElementById('result-summary').innerHTML =
+      card('Preços encontrados', precos.length) +
+      card('Amostras válidas', valores.length) +
+      card('Outliers (IQR)', nOutliers) +
+      card('Menor preço', menor != null ? fmtBRL(menor) : '—') +
+      card('Maior preço', maior != null ? fmtBRL(maior) : '—') +
+      card('Mediana', mediana != null ? fmtBRL(mediana) : '—') +
+      card('Média', media ? fmtBRL(media) : '—', ' highlight');
+
+    // Alertas de qualidade baseados em regras reais (IN 65/2021).
+    const alertas = [];
+    const n = valores.length;
+    if (n < 3) {
+      alertas.push(['critica', 'Dados insuficientes', 'Menos de 3 fontes válidas. A Lei 14.133/2021, Art. 23 recomenda no mínimo 3 fontes — resultado apenas indicativo.']);
+    } else if (n < 6) {
+      alertas.push(['pouca', 'Poucas amostras', 'Apenas ' + n + ' fontes válidas. Considere ampliar a pesquisa para maior robustez.']);
+    } else {
+      alertas.push(['boa', 'Boa consistência', 'Base com ' + n + ' fontes válidas para análise.']);
+    }
+    if (n >= 2) {
+      const dp = n > 1 ? Math.sqrt(valores.reduce((a,b) => a + Math.pow(b - media, 2), 0) / (n - 1)) : 0;
+      const cv = media ? (dp / media) * 100 : 0;
+      if (cv > 50) {
+        alertas.push(['critica', 'Grande dispersão', 'Coeficiente de variação alto (' + cv.toFixed(1) + '%). A mediana é a referência mais robusta.']);
+      } else if (cv > 25) {
+        alertas.push(['atencao', 'Atenção à dispersão', 'Coeficiente de variação de ' + cv.toFixed(1) + '% sugere revisar fontes discrepantes.']);
+        if (cv > 30) alertas.push(['atencao', 'Conduta IN 65', 'CV acima de 30%: usar a mediana como preço de referência.']);
+      }
+    }
+    if (nOutliers > 0) {
+      alertas.push(['atencao', 'Outliers no IQR', nOutliers + ' registro(s) fora do intervalo interquartil; serão descartados na análise e sinalizados na memória de cálculo.']);
+    }
+    const datas = precos.map(p => p.data).filter(Boolean).map(d => new Date(d + (d.length === 10 ? 'T00:00:00' : ''))).filter(d => !isNaN(d));
+    if (datas.length) {
+      const maisRecente = Math.max(...datas);
+      const idadeDias = (Date.now() - maisRecente) / 86400000;
+      if (idadeDias > 730) {
+        alertas.push(['atencao', 'Registros antigos', 'O registro mais recente tem mais de 2 anos. Verifique se os preços ainda refletem o mercado.']);
+      }
+    }
+    const unidades = new Set(precos.map(p => p.unidade).filter(Boolean));
+    if (unidades.size > 1) {
+      alertas.push(['atencao', 'Unidade divergente', 'Foram encontradas unidades diferentes entre registros (' + [...unidades].join(', ') + '). Confira antes de usar.']);
+    }
+
+    const el = document.getElementById('result-alertas');
+    if (!alertas.length) { el.innerHTML = ''; }
+    else {
+      el.innerHTML = alertas.map(a => {
+        const [nivel, tag, msg] = a;
+        return '<div class="alerta ' + nivel + '"><span class="tag">' + tag + '</span><span class="msg">' + msg + '</span></div>';
+      }).join('');
+    }
   }
 
   document.getElementById('add-preco-btn').addEventListener('click', () => {
@@ -890,6 +1056,7 @@
     document.getElementById('preco-orgao').value = '';
     document.getElementById('preco-valor').value = '';
     renderPrecos();
+    renderResultado();
   });
 
   // Busca a mediana de mercado agregada (agregação de várias páginas via worker,
@@ -992,6 +1159,7 @@
         } else {
           precos.push(...novos);
           renderPrecos();
+          renderResultado(novos, codigo, tipo);
           apiStatus.innerHTML = '<div class="ok-note">' + novos.length + ' preço(s) carregado(s) da API oficial para o código '
             + codigo + '.</div>';
           fetchMercado(tipo, codigo);
@@ -1508,6 +1676,7 @@
     document.getElementById('api-status').innerHTML = '';
     document.getElementById('market-cell').style.display = 'none';
     document.getElementById('export-painel-wrap').style.display = 'none';
+    document.getElementById('result-panel').style.display = 'none';
     renderPrecos();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
