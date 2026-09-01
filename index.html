@@ -404,6 +404,13 @@
       </div>
       <div class="field-grid">
         <div>
+          <label for="tipo-item">Tipo de item</label>
+          <select id="tipo-item">
+            <option value="material">Material (CATMAT)</option>
+            <option value="servico">Serviço (CATSER)</option>
+          </select>
+        </div>
+        <div>
           <label for="item-codigo">Código CATMAT / CATSER</label>
           <input id="item-codigo" type="text" placeholder="ex: 240987">
         </div>
@@ -435,13 +442,6 @@
         abaixo vêm diretamente da resposta da API oficial.
       </p>
       <div class="field-grid">
-        <div>
-          <label for="tipo-item">Tipo de item</label>
-          <select id="tipo-item">
-            <option value="material">Material (CATMAT)</option>
-            <option value="servico">Serviço (CATSER)</option>
-          </select>
-        </div>
         <div style="display:flex;align-items:flex-end;">
           <button class="btn primary" id="buscar-api-btn" style="width:100%;">Buscar preços na API oficial</button>
         </div>
@@ -817,7 +817,7 @@
         let existeCatalogo = false;
         let descCatalogo = '';
         try {
-          const cr = await fetch(API_BASE_URL + '/api/catalogo/item?codigo=' + encodeURIComponent(codigo));
+          const cr = await fetch(API_BASE_URL + '/api/catalogo/item?codigo=' + encodeURIComponent(codigo) + '&tipo=' + tipo);
           if (cr.ok) {
             const cdata = await cr.json();
             existeCatalogo = !!cdata.descricao;
