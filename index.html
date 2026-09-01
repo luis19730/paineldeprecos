@@ -751,6 +751,7 @@
       <button class="btn primary" id="export-xlsx-btn">Exportar orçamento (.xlsx)</button>
       <button class="btn ghost" id="clear-budget-btn">Esvaziar orçamento</button>
     </div>
+    <span class="sub" style="display:block;margin-top:0.6rem;font-size:0.68rem;">Salvo automaticamente neste navegador.</span>
   </aside>
 </main>
 
@@ -1244,6 +1245,7 @@
     renderSobrepreco(mediana, limiteSobrepreco, teto, sobrepreco, outlierSet);
 
     ultimoCalculo = {
+      adicionadoEm: new Date().toISOString(),
       codigo: document.getElementById('item-codigo').value.trim(),
       descricao: document.getElementById('item-desc').value.trim(),
       unidade: document.getElementById('item-unidade').value.trim(),
@@ -1336,15 +1338,41 @@
       const spBadge = item.temSobrepreco
         ? '<span class="stamp" style="margin-left:0.4rem;">⚠ sobrepreço</span>'
         : '';
+      const dataStr = item.adicionadoEm
+        ? '<div class="meta"><span>Incluído em ' + new Date(item.adicionadoEm).toLocaleDateString('pt-BR')
+          + ' · ' + nFontes + ' fonte(s) válida(s)</span></div>'
+        : '';
       div.innerHTML = `
         <div class="name">${item.descricao || item.codigo || 'Item sem descrição'}${badge}${spBadge}</div>
-        <div class="meta"><span>${item.quantidade} × ${fmtBRL(item.mediana)}</span><span>${fmtBRL(subtotal)}</span></div>
+        ${dataStr}
+        <div class="meta qty-row">
+          <label for="qty-${i}" style="margin-right:0.4rem;">Qtde</label>
+          <input id="qty-${i}" type="number" class="qty-input" data-qty="${i}"
+            value="${item.quantidade}" min="0.0001" step="0.0001"
+            style="width:5.5rem;background:transparent;border:1px solid var(--line);border-radius:6px;color:inherit;font-family:var(--mono);font-size:0.78rem;padding:0.25rem 0.4rem;text-align:right;">
+          <span style="margin:0 0.4rem;">× ${fmtBRL(item.mediana)}</span>
+          <span>= <strong>${fmtBRL(subtotal)}</strong></span>
+        </div>
         <div class="meta"><button data-i="${i}" style="background:none;border:none;color:inherit;opacity:0.75;cursor:pointer;font-family:var(--mono);font-size:0.7rem;text-decoration:underline;padding:0;">remover</button></div>
       `;
       list.appendChild(div);
     });
     totalRow.style.display = 'flex';
     document.getElementById('budget-total-value').textContent = fmtBRL(total);
+
+    list.querySelectorAll('.qty-input[data-qty]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const valor = parseFloat(inp.value);
+        const idx = Number(inp.dataset.qty);
+        if (!(valor > 0)) {
+          inp.value = orcamento[idx] ? orcamento[idx].quantidade : '';
+          return;
+        }
+        orcamento[idx].quantidade = valor;
+        saveBudget();
+        renderBudget();
+      });
+    });
 
     list.querySelectorAll('button[data-i]').forEach(btn => {
       btn.addEventListener('click', () => {
