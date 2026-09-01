@@ -18,6 +18,8 @@ const DADOS_ABERTOS_BASE_URL = globalThis.DADOS_ABERTOS_BASE_URL || 'https://dad
 // os dados oficiais do governo). Usada porque o filtro textual da API oficial do
 // Compras.gov.br está quebrado desde meados de 2026 (ignora o termo digitado).
 const CATMAT_SEARCH_BASE_URL = 'https://catmat.com.br/api/v1';
+// API do catálogo CATSER (serviços) — indexador análogo ao catmat.com.br.
+const CATSER_SEARCH_BASE_URL = 'https://catser.com.br/api/v1';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -195,59 +197,59 @@ function quartil(sorted, q) {
   return sorted[base];
 }
 
-/** Endpoint de autocomplete do catálogo CATMAT (descrição ou código). */
+/** Endpoint de autocomplete do catálogo CATMAT/CATSER (descrição ou código). */
 async function handleCatalogo(url) {
   const q = (url.searchParams.get('q') || '').trim();
+  const tipo = (url.searchParams.get('tipo') || '').trim();
   if (!q) {
     return json(JSON.stringify({ erro: 'Parâmetro "q" é obrigatório.' }), 400);
   }
 
-  const ehCodigo = /^\d{6}$/.test(q);
+  const ehServico = tipo === 'servico';
+  const base = ehServico ? CATSER_SEARCH_BASE_URL : CATMAT_SEARCH_BASE_URL;
+  const ehCodigo = ehServico ? /^\d{5,10}$/.test(q) : /^\d{6}$/.test(q);
   try {
     if (ehCodigo) {
-      // Busca exata por código CATMAT.
-      const resp = await fetch(`${CATMAT_SEARCH_BASE_URL}/item/${encodeURIComponent(q)}`, {
+      // Busca exata por código.
+      const resp = await fetch(`${base}/item/${encodeURIComponent(q)}`, {
         headers: { accept: 'application/json' },
       });
       if (!resp.ok) {
         return json(JSON.stringify({ itens: [], aviso: 'Item não encontrado para o código informado.' }), 200);
       }
       const item = await resp.json();
-      return json(
-        JSON.stringify({
-          itens: [
-            {
-              codigo_item: item.codigo_item,
-              descricao_item: item.descricao_item,
-              nome_grupo: item.nome_grupo,
-              nome_pdm: item.nome_pdm,
-            },
-          ],
-        }),
-        200
-      );
+      const it = ehServico
+        ? { codigo_item: item.codigo_servico, descricao_item: item.nome_servico, nome_grupo: item.nome_grupo }
+        : { codigo_item: item.codigo_item, descricao_item: item.descricao_item, nome_grupo: item.nome_grupo, nome_pdm: item.nome_pdm };
+      return json(JSON.stringify({ itens: [it] }), 200);
     }
 
     // Busca textual.
     const resp = await fetch(
-      `${CATMAT_SEARCH_BASE_URL}/search?q=${encodeURIComponent(q)}&size=10`,
+      `${base}/search?q=${encodeURIComponent(q)}&size=10`,
       { headers: { accept: 'application/json' } }
     );
     if (!resp.ok) {
-      return json(JSON.stringify({ erro: `catmat.com.br respondeu status ${resp.status}.` }), resp.status);
+      return json(JSON.stringify({ erro: `${ehServico ? 'catser' : 'catmat'}.com.br respondeu status ${resp.status}.` }), resp.status);
     }
     const data = await resp.json();
     const hits = Array.isArray(data.hits) ? data.hits : [];
-    const itens = hits.map((h) => ({
-      codigo_item: h.codigo_item,
-      descricao_item: h.descricao_item,
-      nome_grupo: h.nome_grupo,
-      nome_pdm: h.nome_pdm,
-    }));
+    const itens = ehServico
+      ? hits.map((h) => ({
+          codigo_item: h.codigo_servico,
+          descricao_item: h.nome_servico,
+          nome_grupo: h.nome_grupo,
+        }))
+      : hits.map((h) => ({
+          codigo_item: h.codigo_item,
+          descricao_item: h.descricao_item,
+          nome_grupo: h.nome_grupo,
+          nome_pdm: h.nome_pdm,
+        }));
     return json(JSON.stringify({ itens }), 200);
   } catch (err) {
     return json(
-      JSON.stringify({ erro: 'Falha ao consultar o catálogo CATMAT.', detalhe: String(err && err.message) }),
+      JSON.stringify({ erro: `Falha ao consultar o catálogo ${ehServico ? 'CATSER' : 'CATMAT'}.`, detalhe: String(err && err.message) }),
       502
     );
   }
@@ -307,14 +309,62 @@ async function unidadesPorPdm(pdm) {
   return [];
 }
 
-/** Endpoint que entrega o item completo (descrição + unidade de fornecimento). */
+/** Endpoint que entrega o item completo (descrição + unidade). Suporta material e serviço. */
 async function handleItemCompleto(url) {
   const codigo = (url.searchParams.get('codigo') || '').trim();
-  if (!/^\d{6}$/.test(codigo)) {
-    return json(JSON.stringify({ erro: 'Informe um código de 6 dígitos.' }), 400);
+  const tipo = (url.searchParams.get('tipo') || 'material').trim();
+  const ehServico = tipo === 'servico';
+  // CATMAT tem 6 dígitos; CATSER tem 5 ou mais (ex.: 25127).
+  const valido = ehServico ? /^\d{5,10}$/.test(codigo) : /^\d{6}$/.test(codigo);
+  if (!valido) {
+    return json(JSON.stringify({ erro: 'Informe um código válido.' }), 400);
   }
 
-  // 1) Descrição via catmat (rápida e sem filtro textual quebrado).
+  if (ehServico) {
+    // ---- CATSER: descrição via catser.com.br; unidade via API oficial. ----
+    let itemCatser = null;
+    try {
+      const resp = await fetch(`${CATSER_SEARCH_BASE_URL}/item/${encodeURIComponent(codigo)}`, {
+        headers: { accept: 'application/json' },
+      });
+      if (resp.ok) itemCatser = await resp.json();
+    } catch (e) { /* segue sem */ }
+
+    let unidades = [];
+    try {
+      const qs = `codigoServico=${encodeURIComponent(codigo)}&pagina=1`;
+      const resp = await fetch(
+        `${DADOS_ABERTOS_BASE_URL}/modulo-servico/7_consultarUndMedidaServico?${qs}`,
+        { headers: { accept: 'application/json' } }
+      );
+      if (resp.ok) {
+        const data = await resp.json();
+        unidades = (data.resultado || [])
+          .filter((u) => u.statusUnidadeMedida)
+          .map((u) => ({
+            sigla: u.siglaUnidadeMedida,
+            nome: u.nomeUnidadeMedida,
+          }));
+      }
+    } catch (e) { /* retorna vazio */ }
+
+    const descricao = (itemCatser && itemCatser.nome_servico) || '';
+    const nomeGrupo = (itemCatser && itemCatser.nome_grupo) || '';
+    const unidade = unidades.length ? unidades[0].nome : null;
+
+    return json(
+      JSON.stringify({
+        codigo,
+        descricao,
+        nomeGrupo,
+        unidade,
+        unidades,
+      }),
+      200
+    );
+  }
+
+  // ---- CATMAT (existente) ----
   let itemCatmat = null;
   try {
     const resp = await fetch(`${CATMAT_SEARCH_BASE_URL}/item/${encodeURIComponent(codigo)}`, {

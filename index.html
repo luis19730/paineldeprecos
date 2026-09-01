@@ -584,13 +584,18 @@
   // Endereço do Cloudflare Worker que protege contra bloqueio de CORS.
   const API_BASE_URL = 'https://painel-precos-licitacoes.luis19730.workers.dev';
 
-  // Autocomplete do catálogo CATMAT por descrição (via worker -> catmat.com.br).
+  // Autocomplete do catálogo CATMAT/CATSER por descrição (via worker).
   const descInput = document.getElementById('item-desc');
   const codigoInput = document.getElementById('item-codigo');
   const descSuggest = document.getElementById('desc-suggest');
   let suggestItems = [];
   let suggestIndex = -1;
   let suggestTimer = null;
+
+  // Retorna 'servico' ou 'material' conforme o tipo selecionado no passo 2.
+  function tipoCatalogo(){
+    return document.getElementById('tipo-item').value === 'servico' ? 'servico' : 'material';
+  }
 
   function fechaSugestoes(){
     descSuggest.innerHTML = '';
@@ -605,7 +610,7 @@
     }
     descSuggest.innerHTML = '<ul class="sug-list">' + suggestItems.map((it, i) =>
       '<li data-i="' + i + '" class="' + (i === suggestIndex ? 'active' : '') + '">' +
-        '<span class="sug-code">' + String(it.codigo_item).padStart(6, '0') + '</span>' +
+        '<span class="sug-code">' + String(it.codigo_item) + '</span>' +
         '<span class="sug-desc">' + it.descricao_item + '</span>' +
       '</li>'
     ).join('') + '</ul>';
@@ -621,19 +626,22 @@
     codigoInput.value = it.codigo_item;
     descInput.value = it.descricao_item;
     fechaSugestoes();
-    identificaPorCodigo(String(it.codigo_item).padStart(6, '0'));
+    identificaPorCodigo(String(it.codigo_item), tipoCatalogo());
   }
 
-  // Identificação automática ao informar um código CATMAT de 6 dígitos:
-  // preenche a Descrição e a Unidade (quando disponível) a partir da fonte
-  // oficial (catálogo de materiais + unidade de fornecimento).
-  async function identificaPorCodigo(codigo){
-    if (!/^\d{6}$/.test(codigo)) return;
+  // Identificação automática ao informar um código CATMAT/CATSER: preenche a
+  // Descrição e a Unidade (quando disponível) a partir das fontes oficiais.
+  async function identificaPorCodigo(codigo, tipo){
+    if (!codigo) return;
+    const ehServico = tipo === 'servico';
+    if (!(ehServico ? /^\d{5,10}$/ : /^\d{6}$/).test(String(codigo))) return;
     const unidInput = document.getElementById('item-unidade');
     const unidList = document.getElementById('unid-list');
     if (!descInput.value.trim()) descInput.value = 'Identificando…';
     try {
-      const resp = await fetch(API_BASE_URL + '/api/catalogo/item?codigo=' + encodeURIComponent(codigo));
+      const resp = await fetch(
+        API_BASE_URL + '/api/catalogo/item?codigo=' + encodeURIComponent(codigo) + '&tipo=' + tipoCatalogo()
+      );
       if (!resp.ok) { if (descInput.value === 'Identificando…') descInput.value = ''; return; }
       const data = await resp.json();
       if (data.descricao) descInput.value = data.descricao;
@@ -654,9 +662,9 @@
     }
   }
 
-  codigoInput.addEventListener('blur', () => identificaPorCodigo(codigoInput.value.trim()));
+  codigoInput.addEventListener('blur', () => identificaPorCodigo(codigoInput.value.trim(), tipoCatalogo()));
   codigoInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === 'Tab') identificaPorCodigo(codigoInput.value.trim());
+    if (e.key === 'Enter' || e.key === 'Tab') identificaPorCodigo(codigoInput.value.trim(), tipoCatalogo());
   });
 
   descInput.addEventListener('input', () => {
@@ -665,7 +673,9 @@
     if (termo.length < 3) { fechaSugestoes(); return; }
     suggestTimer = setTimeout(async () => {
       try {
-        const resp = await fetch(API_BASE_URL + '/api/catalogo?q=' + encodeURIComponent(termo));
+        const resp = await fetch(
+          API_BASE_URL + '/api/catalogo?q=' + encodeURIComponent(termo) + '&tipo=' + tipoCatalogo()
+        );
         if (!resp.ok) { fechaSugestoes(); return; }
         const data = await resp.json();
         suggestItems = data.itens || [];
