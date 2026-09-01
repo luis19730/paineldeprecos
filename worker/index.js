@@ -207,7 +207,7 @@ async function handleCatalogo(url) {
 
   const ehServico = tipo === 'servico';
   const base = ehServico ? CATSER_SEARCH_BASE_URL : CATMAT_SEARCH_BASE_URL;
-  const ehCodigo = ehServico ? /^\d{5,10}$/.test(q) : /^\d{6}$/.test(q);
+  const ehCodigo = ehServico ? /^\d{4,10}$/.test(q) : /^\d{6}$/.test(q);
   try {
     if (ehCodigo) {
       // Busca exata por código.
@@ -314,8 +314,8 @@ async function handleItemCompleto(url) {
   const codigo = (url.searchParams.get('codigo') || '').trim();
   const tipo = (url.searchParams.get('tipo') || 'material').trim();
   const ehServico = tipo === 'servico';
-  // CATMAT tem 6 dígitos; CATSER tem 5 ou mais (ex.: 25127).
-  const valido = ehServico ? /^\d{5,10}$/.test(codigo) : /^\d{6}$/.test(codigo);
+  // CATMAT tem 6 dígitos; CATSER tem 4 ou mais (ex.: 2020, 25127).
+  const valido = ehServico ? /^\d{4,10}$/.test(codigo) : /^\d{6}$/.test(codigo);
   if (!valido) {
     return json(JSON.stringify({ erro: 'Informe um código válido.' }), 400);
   }

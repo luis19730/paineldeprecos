@@ -634,7 +634,7 @@
   async function identificaPorCodigo(codigo, tipo){
     if (!codigo) return;
     const ehServico = tipo === 'servico';
-    if (!(ehServico ? /^\d{5,10}$/ : /^\d{6}$/).test(String(codigo))) return;
+    if (!(ehServico ? /^\d{4,10}$/ : /^\d{6}$/).test(String(codigo))) return;
     const unidInput = document.getElementById('item-unidade');
     const unidList = document.getElementById('unid-list');
     if (!descInput.value.trim()) descInput.value = 'Identificando…';
