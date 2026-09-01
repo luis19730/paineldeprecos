@@ -369,13 +369,14 @@
     border-bottom:1px solid var(--border);
     vertical-align:top;
     word-break:break-word;
-    overflow-wrap:anywhere;
+    overflow-wrap:break-word;
   }
-  /* Colunas da tabela de resultados: órgão/UASG flexível com espaço, demais estreitas. */
-  .ledger th:nth-child(1), .ledger td:nth-child(1){width:13%;}
-  .ledger th:nth-child(2), .ledger td:nth-child(2){width:38%;}
-  .ledger th:nth-child(3), .ledger td:nth-child(3){width:6%;}
-  .ledger th:nth-child(4), .ledger td:nth-child(4){width:13%;}
+  /* Colunas da tabela de resultados: larguras proporcionais para fonte e
+     órgão respirarem; UF e data em linha única (sem quebras). */
+  .ledger th:nth-child(1), .ledger td:nth-child(1){width:16%;}
+  .ledger th:nth-child(2), .ledger td:nth-child(2){width:39%;}
+  .ledger th:nth-child(3), .ledger td:nth-child(3){width:5%;white-space:nowrap;}
+  .ledger th:nth-child(4), .ledger td:nth-child(4){width:10%;white-space:nowrap;}
   .ledger th:nth-child(5), .ledger td:nth-child(5){width:14%;}
   .ledger th:nth-child(6), .ledger td:nth-child(6){width:9%;text-align:center;vertical-align:middle;}
   .ledger th:nth-child(7), .ledger td:nth-child(7){width:7%;text-align:center;vertical-align:middle;}
