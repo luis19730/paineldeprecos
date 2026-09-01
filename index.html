@@ -203,6 +203,13 @@
   @media (max-width: 880px){
     main{grid-template-columns:1fr;}
   }
+  @media (max-width: 640px){
+    /* Mantém a tabela utilizável em telas estreitas com rolagem horizontal. */
+    .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+    .table-scroll table{min-width:540px;}
+    .filtro-bar .btn-ghost-min{width:100%;}
+    section.step{padding:1.1rem 1rem;}
+  }
 
   section.step{
     background:var(--surface);
@@ -756,6 +763,7 @@
         <span class="f-cnt" id="precos-contador"></span>
       </div>
 
+      <div class="table-scroll">
       <table class="ledger" id="precos-table" style="display:none;">
         <thead>
           <tr>
@@ -769,6 +777,7 @@
         </thead>
         <tbody id="precos-tbody"></tbody>
       </table>
+      </div>
 
       <div class="pager" id="precos-pager" style="display:none;">
         <button type="button" id="precos-ant">‹ anterior</button>
@@ -893,6 +902,9 @@
   let mercado = null;
 
   const fmtBRL = v => v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+  // Escape HTML para dados externos (API) interpolar com segurança em innerHTML.
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fonteLabel = {
     pncp: 'PNCP',
     painel_precos: 'Painel de Preços',
@@ -948,8 +960,8 @@
     }
     descSuggest.innerHTML = '<ul class="sug-list">' + suggestItems.map((it, i) =>
       '<li data-i="' + i + '" class="' + (i === suggestIndex ? 'active' : '') + '">' +
-        '<span class="sug-code">' + String(it.codigo_item) + '</span>' +
-        '<span class="sug-desc">' + it.descricao_item + '</span>' +
+        '<span class="sug-code">' + esc(it.codigo_item) + '</span>' +
+        '<span class="sug-desc">' + esc(it.descricao_item) + '</span>' +
       '</li>'
     ).join('') + '</ul>';
     // Clicar em uma sugestão seleciona o item.
@@ -990,7 +1002,7 @@
         const opcoes = [];
         data.unidades.forEach(u => {
           const rotulo = u.sigla ? u.sigla + ' — ' + u.nome : u.nome;
-          opcoes.push('<option value="' + u.nome + '"></option>');
+          opcoes.push('<option value="' + esc(u.nome) + '"></option>');
         });
         unidList.innerHTML = opcoes.join('');
         if (data.unidade) unidInput.value = data.unidade;
@@ -1113,10 +1125,10 @@
       const tr = document.createElement('tr');
       if (ehOutlier) tr.className = 'outlier';
       tr.innerHTML = `
-        <td>${fonteLabel[p.fonte] || p.fonte}</td>
-        <td>${p.orgao || '—'}</td>
-        <td>${p.uf || '—'}</td>
-        <td>${p.data || '—'}</td>
+        <td>${esc(fonteLabel[p.fonte] || p.fonte)}</td>
+        <td>${esc(p.orgao) || '—'}</td>
+        <td>${esc(p.uf) || '—'}</td>
+        <td>${esc(p.data) || '—'}</td>
         <td class="num">${fmtBRL(p.valor)}</td>
         <td>${ehOutlier
           ? '<span class="stamp">fora da curva</span>'
@@ -1191,7 +1203,7 @@
     const tr = document.createElement('tr');
     tr.className = 'detail-row';
     tr.innerHTML = '<td colspan="7"><dl class="detail-grid">'
-      + campos.map(c => '<div><dt>' + c[0] + '</dt><dd>' + c[1] + '</dd></div>').join('')
+      + campos.map(c => '<div><dt>' + c[0] + '</dt><dd>' + esc(c[1]) + '</dd></div>').join('')
       + '</dl><button type="button" class="bt-detalhe" data-i="' + i + '">ocultar detalhes</button></td>';
     return tr;
   }
@@ -1205,10 +1217,10 @@
     const fonteAtual = filtroFonte;
     const ufs = [...new Set(precos.map(p => (p.uf || '').toUpperCase()).filter(Boolean))].sort();
     ufSel.innerHTML = '<option value="">UF (todas)</option>'
-      + ufs.map(u => '<option value="' + u + '">' + u + '</option>').join('');
+      + ufs.map(u => '<option value="' + esc(u) + '">' + esc(u) + '</option>').join('');
     const fontes = [...new Set(precos.map(p => p.fonte || '').filter(Boolean))];
     fonteSel.innerHTML = '<option value="">Fonte (todas)</option>'
-      + fontes.map(f => '<option value="' + f + '">' + (fonteLabel[f] || f) + '</option>').join('');
+      + fontes.map(f => '<option value="' + esc(f) + '">' + esc(fonteLabel[f] || f) + '</option>').join('');
     ufSel.value = ufAtual;
     fonteSel.value = fonteAtual;
     if (ufSel.value !== ufAtual) filtroUf = '';
@@ -1221,13 +1233,22 @@
     const texto = byId('filtro-texto'), uf = byId('filtro-uf'), fonte = byId('filtro-fonte');
     const porPagina = byId('filtro-porpagina'), limpar = byId('filtro-limpar');
     const ant = byId('precos-ant'), prox = byId('precos-prox');
-    if (texto) texto.addEventListener('input', e => { filtroTexto = e.target.value; pagina = 1; renderPrecos(); });
+    // Debounce do filtro textual para não re-renderizar a cada tecla.
+    let filtroTimer = null;
+    if (texto) texto.addEventListener('input', e => {
+      const termo = e.target.value;
+      clearTimeout(filtroTimer);
+      filtroTimer = setTimeout(() => {
+        filtroTexto = termo; pagina = 1; renderPrecos();
+      }, 120);
+    });
     if (uf) uf.addEventListener('change', e => { filtroUf = e.target.value; pagina = 1; renderPrecos(); });
     if (fonte) fonte.addEventListener('change', e => { filtroFonte = e.target.value; pagina = 1; renderPrecos(); });
     if (porPagina) porPagina.addEventListener('change', e => {
       POR_PAGINA = Number(e.target.value) || 50; pagina = 1; renderPrecos();
     });
     if (limpar) limpar.addEventListener('click', () => {
+      clearTimeout(filtroTimer);
       filtroTexto = ''; filtroUf = ''; filtroFonte = '';
       if (texto) texto.value = '';
       if (uf) uf.value = '';
@@ -1583,7 +1604,7 @@
       const pct = (limite * 100).toFixed(0);
       if (baseSobrepreco.length) {
         const txt = baseSobrepreco
-          .map(sp => (sp.orgao || sp.fonte) + ' — ' + fmtBRL(sp.valor))
+          .map(sp => esc(sp.orgao || sp.fonte) + ' — ' + fmtBRL(sp.valor))
           .join('; ');
         html = '<div class="warning">⚠️ <strong>Possível sobrepreço:</strong> ' + baseSobrepreco.length
           + ' fonte(s) acima do teto de ' + fmtBRL(baseTeto) + ' (mediana +' + pct + '%): ' + txt
@@ -1594,7 +1615,7 @@
       }
       if (mercadoTeto != null && acimaMercado.length) {
         const txt2 = acimaMercado
-          .map(sp => (sp.orgao || sp.fonte) + ' — ' + fmtBRL(sp.valor))
+          .map(sp => esc(sp.orgao || sp.fonte) + ' — ' + fmtBRL(sp.valor))
           .join('; ');
         html = '<div class="warning">⚠️ <strong>Acima do mercado externo:</strong> ' + acimaMercado.length
           + ' fonte(s) supera(m) a referência externa de ' + fmtBRL(mercadoMediana) + ' (mediana de mercado +'
@@ -1636,7 +1657,7 @@
           + ' · ' + nFontes + ' fonte(s) válida(s)</span></div>'
         : '';
       div.innerHTML = `
-        <div class="name">${item.descricao || item.codigo || 'Item sem descrição'}${badge}${spBadge}</div>
+        <div class="name">${esc(item.descricao || item.codigo || 'Item sem descrição')}${badge}${spBadge}</div>
         ${dataStr}
         <div class="meta qty-row">
           <label for="qty-${i}" style="margin-right:0.4rem;">Qtde</label>
