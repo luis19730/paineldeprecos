@@ -280,6 +280,12 @@
     flex-shrink:0;
     padding-top:1px;
   }
+  .autocomplete .sug-list .sug-desc{
+    flex:1;
+    min-width:0;
+    word-break:break-word;
+    overflow-wrap:anywhere;
+  }
   .autocomplete .sug-empty{
     padding:0.5rem 0.6rem;
     font-size:0.78rem;
@@ -291,6 +297,7 @@
     border-collapse:collapse;
     margin-top:1rem;
     font-size:0.86rem;
+    table-layout:fixed;
   }
   table.ledger th{
     text-align:left;
@@ -299,12 +306,23 @@
     font-size:0.72rem;
     color:var(--ink-soft);
     border-bottom:2px solid var(--border);
-    padding:0.5rem 0.5rem;
+    padding:0.5rem 0.6rem;
   }
   table.ledger td{
-    padding:0.55rem 0.5rem;
+    padding:0.5rem 0.6rem;
     border-bottom:1px solid var(--border);
+    vertical-align:top;
+    word-break:break-word;
+    overflow-wrap:anywhere;
   }
+  /* Colunas da tabela de resultados: órgão/UASG flexível com espaço, demais estreitas. */
+  .ledger th:nth-child(1), .ledger td:nth-child(1){width:13%;}
+  .ledger th:nth-child(2), .ledger td:nth-child(2){width:38%;}
+  .ledger th:nth-child(3), .ledger td:nth-child(3){width:6%;}
+  .ledger th:nth-child(4), .ledger td:nth-child(4){width:13%;}
+  .ledger th:nth-child(5), .ledger td:nth-child(5){width:14%;}
+  .ledger th:nth-child(6), .ledger td:nth-child(6){width:10%;}
+  .ledger th:nth-child(7), .ledger td:nth-child(7){width:6%;}
   table.ledger tbody tr:hover{background:var(--surface-2);}
   table.ledger td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;}
   table.ledger tbody tr.outlier td{color:var(--alert);}
