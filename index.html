@@ -256,7 +256,7 @@
     color:var(--ink-soft);
     margin-bottom:0.35rem;
   }
-  input, select{
+  input, select, textarea{
     width:100%;
     font-family:var(--sans);
     font-size:0.92rem;
@@ -267,12 +267,38 @@
     color:var(--ink);
     transition:border-color .15s ease, box-shadow .15s ease;
   }
-  input::placeholder{color:var(--ink-mute);}
-  input:focus, select:focus, .btn:focus-visible{
+  textarea{resize:vertical;line-height:1.45;}
+  input::placeholder, textarea::placeholder{color:var(--ink-mute);}
+  input:focus, select:focus, textarea:focus, .btn:focus-visible{
     outline:none;
     border-color:var(--primary);
     box-shadow:0 0 0 3px var(--primary-soft);
   }
+  /* Descrição: linha única com reticências + caixa expansível para leitura completa. */
+  .desc-input-row{display:flex;gap:0.45rem;align-items:stretch;}
+  #item-desc{
+    flex:1;
+    min-width:0;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .desc-expand{
+    flex-shrink:0;
+    white-space:nowrap;
+    font-family:var(--sans);
+    font-size:0.72rem;
+    font-weight:600;
+    color:var(--ink-soft);
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    padding:0 0.75rem;
+    cursor:pointer;
+    transition:color .15s ease,border-color .15s ease;
+  }
+  .desc-expand:hover{color:var(--primary);border-color:var(--primary);}
+  #item-desc-full{margin-top:0.45rem;min-height:3.2rem;max-height:16rem;}
 
   .autocomplete{position:relative;z-index:20;}
   .autocomplete .sug-list{
@@ -712,7 +738,11 @@
         </div>
         <div>
           <label for="item-desc">Descrição</label>
-          <input id="item-desc" type="text" placeholder="ex: Papel A4, resma 500 folhas" autocomplete="off">
+          <div class="desc-input-row">
+            <input id="item-desc" type="text" placeholder="ex: Papel A4, resma 500 folhas" autocomplete="off">
+            <button type="button" class="desc-expand" id="desc-expand-btn" title="Expandir descrição completa" aria-label="Expandir descrição completa">expandir</button>
+          </div>
+          <textarea id="item-desc-full" rows="2" style="display:none;" placeholder="Descrição completa — preencha ou edite manualmente se necessário."></textarea>
           <div id="desc-suggest" class="autocomplete"></div>
         </div>
         <div>
@@ -948,11 +978,48 @@
 
   // Autocomplete do catálogo CATMAT/CATSER por descrição (via worker).
   const descInput = document.getElementById('item-desc');
+  const descFull = document.getElementById('item-desc-full');
+  const descExpandBtn = document.getElementById('desc-expand-btn');
   const codigoInput = document.getElementById('item-codigo');
   const descSuggest = document.getElementById('desc-suggest');
   let suggestItems = [];
   let suggestIndex = -1;
   let suggestTimer = null;
+
+  // Redimensiona a caixa de descrição completa conforme o conteúdo (máx. ~16rem).
+  function autoSizeDesc(){
+    if (!descFull) return;
+    descFull.style.height = 'auto';
+    descFull.style.height = Math.min(descFull.scrollHeight + 2, 256) + 'px';
+  }
+  // Mantém a caixa expansível sincronizada com o campo de linha única.
+  function refletDesc(){
+    if (descFull) descFull.value = descInput.value;
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(autoSizeDesc);
+    else autoSizeDesc();
+  }
+  if (descExpandBtn) descExpandBtn.addEventListener('click', () => {
+    const expandido = descFull.style.display !== 'none';
+    if (expandido) {
+      descFull.style.display = 'none';
+      descExpandBtn.textContent = 'expandir';
+      descExpandBtn.title = 'Expandir descrição completa';
+      descExpandBtn.setAttribute('aria-label', 'Expandir descrição completa');
+    } else {
+      descFull.value = descInput.value;
+      descFull.style.display = 'block';
+      autoSizeDesc();
+      descExpandBtn.textContent = 'recolher';
+      descExpandBtn.title = 'Recolher descrição';
+      descExpandBtn.setAttribute('aria-label', 'Recolher descrição');
+      descFull.focus();
+    }
+  });
+  if (descFull) descFull.addEventListener('input', () => {
+    descInput.value = descFull.value;
+    descInput.dispatchEvent(new Event('input', { bubbles: true }));
+    autoSizeDesc();
+  });
 
   // Retorna 'servico' ou 'material' conforme o tipo selecionado no passo 2.
   function tipoCatalogo(){
@@ -987,6 +1054,7 @@
     if (!it) return;
     codigoInput.value = it.codigo_item;
     descInput.value = it.descricao_item;
+    refletDesc();
     fechaSugestoes();
     identificaPorCodigo(String(it.codigo_item), tipoCatalogo());
   }
@@ -1000,6 +1068,7 @@
     const unidInput = document.getElementById('item-unidade');
     const unidList = document.getElementById('unid-list');
     if (!descInput.value.trim()) descInput.value = 'Identificando…';
+    refletDesc();
     try {
       const resp = await fetch(
         API_BASE_URL + '/api/catalogo/item?codigo=' + encodeURIComponent(codigo) + '&tipo=' + tipoCatalogo()
@@ -1008,6 +1077,7 @@
       const data = await resp.json();
       if (data.descricao) descInput.value = data.descricao;
       else if (descInput.value === 'Identificando…') descInput.value = '';
+      refletDesc();
       // Popula as unidades de fornecimento no datalist e preenche a preferencial.
       unidList.innerHTML = '';
       if (Array.isArray(data.unidades) && data.unidades.length) {
@@ -1021,6 +1091,7 @@
       }
     } catch (e) {
       if (descInput.value === 'Identificando…') descInput.value = '';
+      refletDesc();
     }
   }
 
@@ -1030,6 +1101,7 @@
   });
 
   descInput.addEventListener('input', () => {
+    refletDesc();
     const termo = descInput.value.trim();
     clearTimeout(suggestTimer);
     if (termo.length < 3) { fechaSugestoes(); return; }
@@ -2094,6 +2166,12 @@ const cabOrc = [
     detalhesAbertos.clear();
     document.getElementById('item-codigo').value = '';
     document.getElementById('item-desc').value = '';
+    if (descFull) { descFull.value = ''; descFull.style.display = 'none'; }
+    if (descExpandBtn) {
+      descExpandBtn.textContent = 'expandir';
+      descExpandBtn.title = 'Expandir descrição completa';
+      descExpandBtn.setAttribute('aria-label', 'Expandir descrição completa');
+    }
     document.getElementById('item-unidade').value = '';
     document.getElementById('item-qtd').value = '1';
     document.getElementById('tipo-item').value = 'material';
