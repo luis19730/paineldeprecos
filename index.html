@@ -406,7 +406,8 @@
         </div>
         <div>
           <label for="item-unidade">Unidade</label>
-          <input id="item-unidade" type="text" placeholder="ex: resma, unidade, kg">
+          <input id="item-unidade" type="text" list="unid-list" placeholder="ex: resma, unidade, kg">
+          <datalist id="unid-list"></datalist>
         </div>
         <div>
           <label for="item-qtd">Quantidade no orçamento</label>
@@ -605,25 +606,34 @@
     if (!it) return;
     codigoInput.value = it.codigo_item;
     descInput.value = it.descricao_item;
-    document.getElementById('item-unidade').value = '';
     fechaSugestoes();
+    identificaPorCodigo(String(it.codigo_item).padStart(6, '0'));
   }
 
   // Identificação automática ao informar um código CATMAT de 6 dígitos:
-  // preenche a Descrição a partir do catálogo. A unidade não é exposta pela
-  // fonte e fica como campo livre.
+  // preenche a Descrição e a Unidade (quando disponível) a partir da fonte
+  // oficial (catálogo de materiais + unidade de fornecimento).
   async function identificaPorCodigo(codigo){
     if (!/^\d{6}$/.test(codigo)) return;
+    const unidInput = document.getElementById('item-unidade');
+    const unidList = document.getElementById('unid-list');
     if (!descInput.value.trim()) descInput.value = 'Identificando…';
     try {
-      const resp = await fetch(API_BASE_URL + '/api/catalogo?q=' + encodeURIComponent(codigo));
+      const resp = await fetch(API_BASE_URL + '/api/catalogo/item?codigo=' + encodeURIComponent(codigo));
       if (!resp.ok) { if (descInput.value === 'Identificando…') descInput.value = ''; return; }
       const data = await resp.json();
-      const it = (data.itens || [])[0];
-      if (it && it.descricao_item) {
-        descInput.value = it.descricao_item;
-      } else if (descInput.value === 'Identificando…') {
-        descInput.value = '';
+      if (data.descricao) descInput.value = data.descricao;
+      else if (descInput.value === 'Identificando…') descInput.value = '';
+      // Popula as unidades de fornecimento no datalist e preenche a preferencial.
+      unidList.innerHTML = '';
+      if (Array.isArray(data.unidades) && data.unidades.length) {
+        const opcoes = [];
+        data.unidades.forEach(u => {
+          const rotulo = u.sigla ? u.sigla + ' — ' + u.nome : u.nome;
+          opcoes.push('<option value="' + u.nome + '"></option>');
+        });
+        unidList.innerHTML = opcoes.join('');
+        if (data.unidade) unidInput.value = data.unidade;
       }
     } catch (e) {
       if (descInput.value === 'Identificando…') descInput.value = '';

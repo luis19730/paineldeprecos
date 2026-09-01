@@ -253,6 +253,108 @@ async function handleCatalogo(url) {
   }
 }
 
+/** Resolve o codigoPdm de um item usando a API oficial (fallback: catmat.com.br). */
+async function codigoPdmDoItem(codigo, itemCatmat) {
+  try {
+    const qs = `codigoItem=${encodeURIComponent(codigo)}&pagina=1&tamanhoPagina=1`;
+    const resp = await fetch(`${DADOS_ABERTOS_BASE_URL}/modulo-material/4_consultarItemMaterial?${qs}`, {
+      headers: { accept: 'application/json' },
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const item = (data.resultado || [])[0];
+      if (item && item.codigoPdm) {
+        return {
+          pdm: item.codigoPdm,
+          descricao: item.descricaoItem,
+          nomePdm: item.nomePdm,
+        };
+      }
+    }
+  } catch (e) {
+    /* fallback abaixo */
+  }
+  // Fallback: catmat.com.br expõe codigo_pdm.
+  if (itemCatmat && itemCatmat.codigo_pdm) {
+    return { pdm: itemCatmat.codigo_pdm, descricao: itemCatmat.descricao_item };
+  }
+  return null;
+}
+
+/** Consulta as unidades de fornecimento de um item pelo PDM (fonte oficial). */
+async function unidadesPorPdm(pdm) {
+  try {
+    const qs = `codigoPdm=${encodeURIComponent(pdm)}&pagina=1&tamanhoPagina=100`;
+    const resp = await fetch(
+      `${DADOS_ABERTOS_BASE_URL}/modulo-material/6_consultarMaterialUnidadeFornecimento?${qs}`,
+      { headers: { accept: 'application/json' } }
+    );
+    if (resp.ok) {
+      const data = await resp.json();
+      const lista = (data.resultado || []);
+      return lista
+        .filter((u) => u.statusUnidadeFornecimento)
+        .map((u) => ({
+          sigla: u.siglaUnidadeFornecimento,
+          nome: u.nomeUnidadeFornecimento,
+          siglaMedida: u.siglaUnidadeMedida,
+          capacidade: u.capacidadeUnidadeFornecimento,
+        }));
+    }
+  } catch (e) {
+    /* retorna vazio */
+  }
+  return [];
+}
+
+/** Endpoint que entrega o item completo (descrição + unidade de fornecimento). */
+async function handleItemCompleto(url) {
+  const codigo = (url.searchParams.get('codigo') || '').trim();
+  if (!/^\d{6}$/.test(codigo)) {
+    return json(JSON.stringify({ erro: 'Informe um código de 6 dígitos.' }), 400);
+  }
+
+  // 1) Descrição via catmat (rápida e sem filtro textual quebrado).
+  let itemCatmat = null;
+  try {
+    const resp = await fetch(`${CATMAT_SEARCH_BASE_URL}/item/${encodeURIComponent(codigo)}`, {
+      headers: { accept: 'application/json' },
+    });
+    if (resp.ok) itemCatmat = await resp.json();
+  } catch (e) { /* segue sem */ }
+
+  // 2) PDM pela API oficial (fallback para catmat).
+  let pdmInfo = await codigoPdmDoItem(codigo, itemCatmat);
+  // Se a oficial falhou mas a catmat tem codigo_pdm, já foi resolvido no fallback.
+
+  // 3) Unidades de fornecimento pelo PDM.
+  let unidades = [];
+  if (pdmInfo && pdmInfo.pdm) {
+    unidades = await unidadesPorPdm(pdmInfo.pdm);
+  }
+
+  const descricao =
+    (pdmInfo && pdmInfo.descricao) ||
+    (itemCatmat && itemCatmat.descricao_item) ||
+    '';
+  const nomePdm = (pdmInfo && pdmInfo.nomePdm) || (itemCatmat && itemCatmat.nome_pdm) || '';
+
+  // Unidade preferencial: a primeira disponível; senão null.
+  const unidade = unidades.length ? unidades[0].nome : null;
+
+  return json(
+    JSON.stringify({
+      codigo,
+      descricao,
+      nomePdm,
+      codigoPdm: pdmInfo ? pdmInfo.pdm : null,
+      unidade,
+      unidades,
+    }),
+    200
+  );
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -272,6 +374,9 @@ export default {
     }
     if (url.pathname === '/api/catalogo') {
       return handleCatalogo(url);
+    }
+    if (url.pathname === '/api/catalogo/item') {
+      return handleItemCompleto(url);
     }
 
     return json(
