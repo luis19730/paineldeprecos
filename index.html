@@ -495,6 +495,18 @@
         <div class="stat-cell"><span class="label">coef. de variação</span><span class="value" id="stat-cv">—</span></div>
       </div>
 
+      <div class="field-grid" style="margin-top:1.1rem;max-width:340px;">
+        <div>
+          <label for="sobrepreco-limite">Limite de sobrepreço sobre a mediana (%)</label>
+          <input id="sobrepreco-limite" type="number" min="0" max="500" step="1" value="25">
+          <div class="hint" style="font-size:0.72rem;color:var(--ink-soft);font-family:var(--mono);margin-top:0.3rem;">
+            Critério configurável do gestor. Padrão 25% (alinhado ao alerta de dispersão da IN 65/2021).
+          </div>
+        </div>
+      </div>
+
+      <div id="sobrepreco-result"></div>
+
       <div id="stat-warning"></div>
 
       <button class="btn primary" id="add-to-budget-btn" style="margin-top:1.2rem;display:none;">
@@ -806,6 +818,33 @@
 
     renderPrecos(outlierSet);
 
+    // ---- Análise de sobrepreço (fase 2) ----
+    // Critério configurável do gestor: preço de fonte que ultrapassa
+    // mediana × (1 + limite%) é sinalizado como potencial sobrepreço.
+    const limiteSobrepreco = (parseFloat(document.getElementById('sobrepreco-limite').value) || 25) / 100;
+    const teto = mediana * (1 + limiteSobrepreco);
+    const sobrepreco = precos.filter((p, i) => !outlierSet.has(i) && p.valor > teto);
+
+    const sobreprecoEl = document.getElementById('sobrepreco-result');
+    let sobreprecoHTML = '';
+    if (valores.length >= 2 && mediana > 0) {
+      const pct = (limiteSobrepreco * 100).toFixed(0);
+      if (sobrepreco.length) {
+        const txt = sobrepreco
+          .map(sp => (sp.orgao || sp.fonte) + ' — ' + fmtBRL(sp.valor))
+          .join('; ');
+        sobreprecoHTML = '<div class="warning">⚠️ <strong>Possível sobrepreço:</strong> ' + sobrepreco.length
+          + ' fonte(s) acima do teto de ' + fmtBRL(teto) + ' (mediana +' + pct + '%): ' + txt
+          + '. Revisar antes de usar como referência.</div>';
+      } else {
+        sobreprecoHTML = '<div class="ok-note">Nenhuma fonte acima do teto de ' + fmtBRL(teto)
+          + ' (mediana +' + pct + '%). Sem indício de sobrepreço.</div>';
+      }
+    } else {
+      sobreprecoHTML = '';
+    }
+    sobreprecoEl.innerHTML = sobreprecoHTML;
+
     ultimoCalculo = {
       codigo: document.getElementById('item-codigo').value.trim(),
       descricao: document.getElementById('item-desc').value.trim(),
@@ -816,6 +855,10 @@
       // se atende o mínimo de 3 fontes distintas da Lei 14.133/2021, Art. 23.
       fontesValidas: precos.filter((p,i) => !outlierSet.has(i)).length,
       fontesDistintas: new Set(precos.map(p => p.orgao || p.fonte)).size,
+      limiteSobrepreco: limiteSobrepreco,
+      tetoSobrepreco: teto,
+      temSobrepreco: sobrepreco.length > 0,
+      qtdSobrepreco: sobrepreco.length,
       fontes: precos.map((p,i) => ({...p, descartado: outlierSet.has(i)}))
     };
     document.getElementById('add-to-budget-btn').style.display = 'inline-block';
@@ -845,8 +888,11 @@
       const badge = nFontes >= 3
         ? '<span class="stamp" style="border-color:var(--ok);color:var(--ok);transform:none;margin-left:0.4rem;">' + nFontes + ' fontes ✓</span>'
         : '<span class="stamp">' + nFontes + ' fontes</span>';
+      const spBadge = item.temSobrepreco
+        ? '<span class="stamp" style="margin-left:0.4rem;">⚠ sobrepreço</span>'
+        : '';
       div.innerHTML = `
-        <div class="name">${item.descricao || item.codigo || 'Item sem descrição'}${badge}</div>
+        <div class="name">${item.descricao || item.codigo || 'Item sem descrição'}${badge}${spBadge}</div>
         <div class="meta"><span>${item.quantidade} × ${fmtBRL(item.mediana)}</span><span>${fmtBRL(subtotal)}</span></div>
         <div class="meta"><button data-i="${i}" style="background:none;border:none;color:inherit;opacity:0.75;cursor:pointer;font-family:var(--mono);font-size:0.7rem;text-decoration:underline;padding:0;">remover</button></div>
       `;
@@ -909,6 +955,7 @@
         ? item.fontesValidas
         : fontesValidas.length;
       const atendeMinimo = fontesDistintas >= 3;
+      const temSobrepreco = !!item.temSobrepreco;
       return {
         'Item': item.descricao,
         'Código CATMAT/CATSER': item.codigo,
@@ -919,13 +966,14 @@
         'Nº de Fontes Usadas': fontesDistintas,
         'Fontes Distintas (Auditoria)': fontesDistintas,
         'Atende mínimo de 3 fontes (Art. 23)': atendeMinimo ? 'SIM' : 'NÃO',
+        'Possível Soberpreço (acima do limite configurado)': temSobrepreco ? 'SIM — revisar' : 'NÃO',
         'Coef. de Variação (%)': (item.cv !== undefined ? item.cv : 0).toFixed(1)
       };
     });
     const wsOrc = XLSX.utils.json_to_sheet(orcamentoRows);
     // Larguras das colunas.
     wsOrc['!cols'] = [
-      {wch:45},{wch:15},{wch:10},{wch:11},{wch:22},{wch:16},{wch:14},{wch:16},{wch:28},{wch:16}
+      {wch:45},{wch:15},{wch:10},{wch:11},{wch:22},{wch:16},{wch:14},{wch:16},{wch:28},{wch:32},{wch:16}
     ];
     XLSX.utils.book_append_sheet(wb, wsOrc, 'Orçamento');
 
@@ -962,6 +1010,7 @@
       { 'Metodologia aplicada': '- Descarte de outliers: método do intervalo interquartil (IQR). Considerados outliers os valores fora de Q1 - 1,5×IQR e Q3 + 1,5×IQR.' },
       { 'Metodologia aplicada': '- Coeficiente de variação: mede a dispersão relativa; valores acima de 25% indicam revisão das fontes.' },
       { 'Metodologia aplicada': '- Conformidade: cada item indica se atende o mínimo de 3 fontes distintas exigido pelo Art. 23.' },
+      { 'Metodologia aplicada': '- Sobrepreço: sinalizados os itens em que alguma fonte válida ultrapassa o TETO = mediana × (1 + limite do gestor). O limite é configurável e foi registrado na aba "Orçamento" (coluna "Possível Sobrepreço").' },
       { 'Metodologia aplicada': '' },
       { 'Metodologia aplicada': 'RASTREABILIDADE' },
       { 'Metodologia aplicada': 'Cada preço coletado possui origem registrada (fonte, órgão/fornecedor, UF, data e valor). A aba "Memória de Cálculo" documenta individualmente as cotações utilizadas e as descartadas, permitindo auditoria e controle da Administração Pública.' },
