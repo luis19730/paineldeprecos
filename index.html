@@ -797,8 +797,26 @@
       const lista = data.resultado || data.result || data.resultados || [];
 
       if (!lista.length) {
-        apiStatus.innerHTML = '<div class="warning">A API não retornou nenhum preço praticado para o código '
-          + codigo + '. Confira se o código CATMAT/CATSER está correto, ou registre uma cotação manual abaixo.</div>';
+        // Distingue "código inexistente" de "código válido sem preços registrados".
+        let existeCatalogo = false;
+        let descCatalogo = '';
+        try {
+          const cr = await fetch(API_BASE_URL + '/api/catalogo/item?codigo=' + encodeURIComponent(codigo));
+          if (cr.ok) {
+            const cdata = await cr.json();
+            existeCatalogo = !!cdata.descricao;
+            descCatalogo = cdata.descricao || '';
+          }
+        } catch (e) { /* segue sem catálogo */ }
+        if (existeCatalogo) {
+          apiStatus.innerHTML = '<div class="warning">O código ' + codigo + ' existe no catálogo (' + descCatalogo.substring(0, 90)
+            + '), mas <strong>não há preços praticados registrados</strong> na base oficial do Compras.gov.br para ele. '
+            + 'Isso é comum em itens desatualizados ou sem compras recentes. Sugestões: consulte itens similares no catálogo '
+            + 'ou registre uma cotação manual abaixo.</div>';
+        } else {
+          apiStatus.innerHTML = '<div class="warning">A API não retornou nenhum preço praticado para o código '
+            + codigo + '. Confira se o código CATMAT/CATSER está correto, ou registre uma cotação manual abaixo.</div>';
+        }
       } else {
         // Nomes de campo do JSON de retorno podem variar; mapeamos as variantes
         // conhecidas e ignoramos registros sem valor numérico válido.
