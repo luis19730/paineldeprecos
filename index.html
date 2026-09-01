@@ -128,7 +128,30 @@
     display:flex;
     gap:0.6rem;
     align-items:center;
+    flex-wrap:wrap;
   }
+  .api-status{
+    display:inline-flex;
+    align-items:center;
+    gap:0.45rem;
+    padding:0.35rem 0.75rem;
+    border:1px solid var(--border);
+    border-radius:999px;
+    background:var(--surface);
+    font-family:var(--mono);
+    font-size:0.72rem;
+    color:var(--ink-soft);
+    white-space:nowrap;
+  }
+  .api-status .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--ink-mute);
+    flex-shrink:0;
+  }
+  .api-status.online .dot{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,0.2);}
+  .api-status.offline .dot{background:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,0.2);}
+  .api-status.checking .dot{background:#f59e0b;animation:pulse 1.2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
   .theme-toggle{
     display:inline-flex;align-items:center;justify-content:center;
     width:2.4rem;height:2.4rem;border-radius:10px;
@@ -482,10 +505,14 @@
 <header class="letterhead">
   <div class="letterhead-row">
     <div>
-      <h1>Painel de Preços <span class="grad">para Licitações</span></h1>
-      <p>Lei 14.133/2021, Art. 23 · IN SEGES/ME nº 65/2021 · pesquisa de preços e padronização de orçamentos</p>
+      <h1>Pesquisa de Preços <span class="grad">Inteligente</span></h1>
+      <p>Pesquisa, análise e formação de preços para contratações públicas · Lei 14.133/2021, Art. 23 · IN SEGES/ME nº 65/2021</p>
     </div>
     <div class="header-tools">
+      <span class="api-status" id="api-status-indicator" role="status">
+        <span class="dot"></span><span id="api-status-text">Verificando API…</span>
+      </span>
+      <button class="btn" id="nova-pesquisa-btn">Nova pesquisa</button>
       <button class="btn" id="reset-btn">Limpar sessão</button>
       <button class="theme-toggle" id="theme-toggle" aria-label="Alternar tema claro/escuro">🌓</button>
     </div>
@@ -1426,6 +1453,63 @@
     XLSX.utils.book_append_sheet(wb, wsMet, 'Metodologia');
 
     XLSX.writeFile(wb, 'orcamento-padronizado.xlsx');
+  });
+
+  // ---- Indicador de status da API (FASE 3) ----
+  const apiStatusEl = document.getElementById('api-status-indicator');
+  const apiStatusText = document.getElementById('api-status-text');
+  function setApiStatus(classe, texto){
+    if (!apiStatusEl) return;
+    apiStatusEl.classList.remove('online', 'offline', 'checking');
+    if (classe) apiStatusEl.classList.add(classe);
+    if (texto) apiStatusText.textContent = texto;
+  }
+  async function verificarApi(){
+    setApiStatus('checking', 'Consultando');
+    const inicio = Date.now();
+    try {
+      const controlador = new AbortController();
+      const timer = setTimeout(() => controlador.abort(), 8000);
+      const resp = await fetch(API_BASE_URL + '/api/catalogo?q=resma&tipo=material', {
+        headers: { 'Accept': 'application/json' },
+        signal: controlador.signal
+      });
+      clearTimeout(timer);
+      if (resp && resp.ok) {
+        setApiStatus('online', 'API online');
+      } else {
+        setApiStatus('offline', 'API indisponível');
+      }
+    } catch (e) {
+      setApiStatus('offline', 'API indisponível');
+    }
+  }
+  verificarApi();
+
+  // ---- Botão "Nova pesquisa" — reinicia o fluxo sem apagar o orçamento ----
+  const novaPesquisaBtn = document.getElementById('nova-pesquisa-btn');
+  if (novaPesquisaBtn) novaPesquisaBtn.addEventListener('click', () => {
+    precos.length = 0;
+    ultimoCalculo = null;
+    mercado = null;
+    document.getElementById('item-codigo').value = '';
+    document.getElementById('item-desc').value = '';
+    document.getElementById('item-unidade').value = '';
+    document.getElementById('item-qtd').value = '1';
+    document.getElementById('tipo-item').value = 'material';
+    fechaSugestoes();
+    document.getElementById('precos-table').style.display = 'none';
+    document.getElementById('precos-empty').style.display = 'block';
+    document.getElementById('precos-tbody').innerHTML = '';
+    document.getElementById('stat-grid').style.display = 'none';
+    document.getElementById('add-to-budget-btn').style.display = 'none';
+    document.getElementById('stat-warning').innerHTML = '';
+    document.getElementById('sobrepreco-result').innerHTML = '';
+    document.getElementById('api-status').innerHTML = '';
+    document.getElementById('market-cell').style.display = 'none';
+    document.getElementById('export-painel-wrap').style.display = 'none';
+    renderPrecos();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
   loadBudget();
