@@ -351,16 +351,26 @@
   .ledger th:nth-child(3), .ledger td:nth-child(3){width:6%;}
   .ledger th:nth-child(4), .ledger td:nth-child(4){width:13%;}
   .ledger th:nth-child(5), .ledger td:nth-child(5){width:14%;}
-  .ledger th:nth-child(6), .ledger td:nth-child(6){width:10%;}
-  .ledger th:nth-child(7), .ledger td:nth-child(7){width:6%;}
+  .ledger th:nth-child(6), .ledger td:nth-child(6){width:9%;text-align:center;vertical-align:middle;}
+  .ledger th:nth-child(7), .ledger td:nth-child(7){width:7%;text-align:center;vertical-align:middle;}
   table.ledger tbody tr:hover{background:var(--surface-2);}
-  table.ledger td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  table.ledger td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;}
   table.ledger tbody tr.outlier td{color:var(--alert);}
-  .row-actions button{
-    background:none;border:none;color:var(--ink-soft);cursor:pointer;
-    font-family:var(--sans);font-size:0.75rem;font-weight:600;text-decoration:underline;
+  /* Colunas de ação: botões de detalhes e de remoção em linha única, sem quebra. */
+  table.ledger td .bt-detalhe{
+    background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);
+    color:var(--ink-soft);cursor:pointer;font-family:var(--sans);
+    font-size:0.72rem;font-weight:600;padding:0.3rem 0.55rem;
+    white-space:nowrap;transition:color .15s ease,border-color .15s ease,background .15s ease;
   }
-  .row-actions button:hover{color:var(--alert);}
+  table.ledger td .bt-detalhe:hover{border-color:var(--primary);color:var(--primary);background:var(--surface-2);}
+  table.ledger td.row-actions button{
+    background:none;border:none;color:var(--ink-soft);cursor:pointer;
+    width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;
+    border-radius:var(--radius-sm);transition:background .15s ease,color .15s ease;
+  }
+  table.ledger td.row-actions button:hover{background:var(--alert-soft);color:var(--alert);}
+  table.ledger td.row-actions button svg{width:15px;height:15px;flex-shrink:0;display:block;}
 
   .stamp{
     display:inline-block;
@@ -905,6 +915,8 @@
   // Escape HTML para dados externos (API) interpolar com segurança em innerHTML.
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
     c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  // Ícone SVG de lixeira (Feather "trash-2") usado no botão de remover registros/itens.
+  const TRASH_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
   const fonteLabel = {
     pncp: 'PNCP',
     painel_precos: 'Painel de Preços',
@@ -1133,7 +1145,7 @@
         <td>${ehOutlier
           ? '<span class="stamp">fora da curva</span>'
           : (temDetalhe ? '<button type="button" class="bt-detalhe" data-i="' + i + '">' + (aberto ? 'ocultar' : 'detalhes') + '</button>' : '')}</td>
-        <td class="row-actions"><button data-i="${i}">remover</button></td>
+        <td class="row-actions"><button type="button" data-i="${i}" title="Remover registro" aria-label="Remover registro">${TRASH_SVG}</button></td>
       `;
       precosTbody.appendChild(tr);
       if (aberto) precosTbody.appendChild(detalheRow(p, i));
@@ -1667,7 +1679,7 @@
           <span style="margin:0 0.4rem;">× ${fmtBRL(item.mediana)}</span>
           <span>= <strong>${fmtBRL(subtotal)}</strong></span>
         </div>
-        <div class="meta"><button data-i="${i}" style="background:none;border:none;color:inherit;opacity:0.75;cursor:pointer;font-family:var(--mono);font-size:0.7rem;text-decoration:underline;padding:0;">remover</button></div>
+        <div class="meta"><button type="button" data-i="${i}" title="Remover item do orçamento" aria-label="Remover item do orçamento" style="background:none;border:none;color:inherit;opacity:0.7;cursor:pointer;padding:0.15rem;display:inline-flex;align-items:center;vertical-align:middle;">${TRASH_SVG.replace('<svg ', '<svg width="14" height="14" ')}</button></div>
       `;
       list.appendChild(div);
     });
