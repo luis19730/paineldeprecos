@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 <style>
   :root{
     --paper:#EEE8D8;
@@ -1115,56 +1115,167 @@
   document.getElementById('export-xlsx-btn').addEventListener('click', () => {
     if (!orcamento.length) { alert('Adicione ao menos um item ao orçamento antes de exportar.'); return; }
 
-    const wb = XLSX.utils.book_new();
+    // ---- Helpers de formatação/estilo do Excel ----
+    // Repara mojibake (dupla codificação) de texto, p. ex.:
+    //   "JOÃO PESSOA" lido/homologado como Windows-1252 → "JOÃƒO PESSOA".
+    // Converte a string para bytes (Windows-1252) e redecodifica como UTF-8.
+    const MAPA_CP1252 = {
+      0x20ac: 0x80, 0x201a: 0x82, 0x0192: 0x83, 0x201e: 0x84, 0x2026: 0x85,
+      0x2020: 0x86, 0x2021: 0x87, 0x02c6: 0x88, 0x2030: 0x89, 0x0160: 0x8a,
+      0x2039: 0x8b, 0x0152: 0x8c, 0x017d: 0x8e, 0x2018: 0x91, 0x2019: 0x92,
+      0x201c: 0x93, 0x201d: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+      0x02dc: 0x98, 0x2122: 0x99, 0x0161: 0x9a, 0x203a: 0x9b, 0x0153: 0x9c,
+      0x017e: 0x9e, 0x0178: 0x9f
+    };
+    function repararTexto(s){
+      if (typeof s !== 'string' || !s) return s;
+      if (typeof TextDecoder !== 'function') return s;
+      const bytes = [];
+      for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        if (c <= 0xff) bytes.push(c);
+        else if (MAPA_CP1252[c] != null) bytes.push(MAPA_CP1252[c]);
+        else return s; // já tem Unicode "puro" — não é mojibake
+      }
+      try {
+        const out = new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(bytes));
+        return out === s ? s : out;
+      } catch (e) { return s; }
+    }
+    const bordaFina = {
+      top:    { style: 'thin', color: { rgb: 'C9D1D4' } },
+      bottom: { style: 'thin', color: { rgb: 'C9D1D4' } },
+      left:   { style: 'thin', color: { rgb: 'C9D1D4' } },
+      right:  { style: 'thin', color: { rgb: 'C9D1D4' } }
+    };
+    // Identificadores/chaves (códigos, CNPJ) sempre como TEXTO → sem 3,19E+13.
+    function celCodigo(v){
+      return { t: 's', v: String(v == null ? '' : v), s: {
+        font: { color: { rgb: '1F3A4D' }, sz: 10 },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: bordaFina
+      } };
+    }
+    function celTexto(v, centro){
+      return { t: 's', v: repararTexto(v == null ? '' : String(v)), s: {
+        font: { color: { rgb: '1F3A4D' }, sz: 10 },
+        alignment: { horizontal: centro ? 'center' : 'left', vertical: 'center', wrapText: true },
+        border: bordaFina
+      } };
+    }
+    function celNum(v, fmt, dec){
+      const n = Number(v);
+      if (v == null || !isFinite(n)) return celTexto(v == null ? '' : v);
+      return { t: 'n', v: n, z: fmt, s: {
+        font: { color: { rgb: '1F3A4D' }, sz: 10 },
+        alignment: { horizontal: 'right', vertical: 'center' },
+        border: bordaFina
+      } };
+    }
+    function celHeader(txt){
+      return { t: 's', v: txt, s: {
+        font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
+        fill: { patternType: 'solid', fgColor: { rgb: '1F3A4D' } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+        border: bordaFina
+      } };
+    }
+    function larguraAuto(aoa){
+      const nCols = Math.max.apply(null, aoa.map(l => l.length));
+      const cols = [];
+      for (let c = 0; c < nCols; c++) {
+        let max = 0;
+        aoa.forEach(l => {
+          const cel = l[c];
+          if (!cel) return;
+          const tam = cel.v != null ? String(cel.v).length : 0;
+          if (cel.t === 'n' && typeof cel.v === 'number') {
+            const ajuste = cel.z && cel.z.indexOf('R$') !== -1 ? 4 : 3;
+            max = Math.max(max, cel.v.toFixed(dec).length + ajuste);
+          } else {
+            max = Math.max(max, tam);
+          }
+        });
+        cols.push({ wch: Math.min(Math.max(max + 2, 10), 80) });
+      }
+      return cols;
+    }
+    function estendeZebra(aoa){
+      for (let r = 1; r < aoa.length; r++) {
+        if (r % 2 === 0) continue;
+        aoa[r].forEach(cel => {
+          if (cel && cel.s) cel.s.fill = { patternType: 'solid', fgColor: { rgb: 'F4F7F9' } };
+        });
+      }
+    }
 
-    // Aba 1 — Orçamento (com critérios de conformidade da Lei 14.133/2021 Art. 23).
-    const orcamentoRows = orcamento.map(item => {
+    const wb = XLSX.utils.book_new();
+    const FMT_MOEDA = '"R$" #,##0.00';
+    const FMT_INT = '#,##0';
+    const dec = 2; // casas decimais p/ largura automática
+
+    // ---- Aba 1 — Orçamento (critérios de conformidade da Lei 14.133/2021 Art. 23). ----
+    const cabOrc = [
+      'Item', 'Código CATMAT/CATSER', 'Unidade', 'Quantidade',
+      'Preço Unitário de Referência (mediana)', 'Preço Total',
+      'Nº de Fontes Usadas', 'Fontes Distintas (Auditoria)',
+      'Atende mínimo de 3 fontes (Art. 23)',
+      'Possível Sobrepreço (acima do limite configurado)',
+      'Referência de Mercado Externo (mediana, R$)', 'Itens no Mercado Externo',
+      'Coef. de Variação (%)'
+    ];
+    const aoaOrc = [cabOrc.map(celHeader)];
+    orcamento.forEach(item => {
       const fontesValidas = item.fontes ? item.fontes.filter(f => !f.descartado) : [];
       const fontesDistintas = item.fontesValidas !== undefined
         ? item.fontesValidas
         : fontesValidas.length;
       const atendeMinimo = fontesDistintas >= 3;
       const temSobrepreco = !!item.temSobrepreco;
-      return {
-        'Item': item.descricao,
-        'Código CATMAT/CATSER': item.codigo,
-        'Unidade': item.unidade,
-        'Quantidade': item.quantidade,
-        'Preço Unitário de Referência (mediana)': item.mediana,
-        'Preço Total': item.mediana * item.quantidade,
-        'Nº de Fontes Usadas': fontesDistintas,
-        'Fontes Distintas (Auditoria)': fontesDistintas,
-        'Atende mínimo de 3 fontes (Art. 23)': atendeMinimo ? 'SIM' : 'NÃO',
-        'Possível Soberpreço (acima do limite configurado)': temSobrepreco ? 'SIM — revisar' : 'NÃO',
-        'Referência de Mercado Externo (mediana, R$)': item.referenciaMercado != null ? item.referenciaMercado : 'N/D',
-        'Itens no Mercado Externo': item.mercadoItens != null ? item.mercadoItens : 'N/D',
-        'Coef. de Variação (%)': (item.cv !== undefined ? item.cv : 0).toFixed(1)
-      };
+      aoaOrc.push([
+        celTexto(item.descricao),
+        celCodigo(item.codigo),
+        celTexto(item.unidade, true),
+        celNum(item.quantidade, '#,##0.00'),
+        celNum(item.mediana, FMT_MOEDA),
+        celNum(item.mediana * item.quantidade, FMT_MOEDA),
+        celNum(fontesDistintas, FMT_INT),
+        celNum(fontesDistintas, FMT_INT),
+        celTexto(atendeMinimo ? 'SIM' : 'NÃO', true),
+        celTexto(temSobrepreco ? 'SIM — revisar' : 'NÃO', true),
+        celNum(item.referenciaMercado != null ? item.referenciaMercado : null, FMT_MOEDA),
+        celNum(item.mercadoItens != null ? item.mercadoItens : null, FMT_INT),
+        celNum(item.cv !== undefined ? item.cv : 0, '0.0"%"')
+      ]);
     });
-    const wsOrc = XLSX.utils.json_to_sheet(orcamentoRows);
-    // Larguras das colunas.
-    wsOrc['!cols'] = [
-      {wch:45},{wch:15},{wch:10},{wch:11},{wch:22},{wch:16},{wch:14},{wch:16},{wch:28},{wch:32},{wch:24},{wch:16},{wch:16}
-    ];
+    estendeZebra(aoaOrc);
+    const wsOrc = XLSX.utils.aoa_to_sheet(aoaOrc);
+    wsOrc['!cols'] = larguraAuto(aoaOrc);
     XLSX.utils.book_append_sheet(wb, wsOrc, 'Orçamento');
 
-    // Aba 2 — Memória de Cálculo (rastreabilidade por fonte).
-    const memRows = [];
+    // ---- Aba 2 — Memória de Cálculo (rastreabilidade por fonte). ----
+    const cabMem = [
+      'Item', 'Código', 'Fonte', 'Órgão/Fornecedor', 'UF', 'Data',
+      'Valor Coletado (R$)', 'Usado no Cálculo'
+    ];
+    const aoaMem = [cabMem.map(celHeader)];
     orcamento.forEach(item => {
       (item.fontes || []).forEach(f => {
-        memRows.push({
-          'Item': item.descricao,
-          'Código': item.codigo,
-          'Fonte': fonteLabel[f.fonte] || f.fonte,
-          'Órgão/Fornecedor': f.orgao,
-          'UF': f.uf,
-          'Data': f.data,
-          'Valor Coletado (R$)': f.valor,
-          'Usado no Cálculo': f.descartado ? 'Não (outlier)' : 'Sim'
-        });
+        aoaMem.push([
+          celTexto(item.descricao),
+          celCodigo(item.codigo),
+          celTexto(fonteLabel[f.fonte] || f.fonte),
+          celTexto(f.orgao),
+          celTexto(f.uf, true),
+          celTexto(f.data, true),
+          celNum(f.valor, FMT_MOEDA),
+          celTexto(f.descartado ? 'Não (outlier)' : 'Sim', true)
+        ]);
       });
     });
-    const wsMem = XLSX.utils.json_to_sheet(memRows);
+    estendeZebra(aoaMem);
+    const wsMem = XLSX.utils.aoa_to_sheet(aoaMem);
+    wsMem['!cols'] = larguraAuto(aoaMem);
     XLSX.utils.book_append_sheet(wb, wsMem, 'Memória de Cálculo');
 
     // Aba 3 — Metodologia (base legal completa para auditoria).
@@ -1190,7 +1301,10 @@
       { 'Metodologia aplicada': 'ATENÇÃO' },
       { 'Metodologia aplicada': 'A conformidade com o mínimo de 3 fontes depende da disponibilidade de dados públicos para o código informado. Itens marcados como "NÃO" no campo "Atende mínimo de 3 fontes" devem ter cotações complementares antes de instruir o processo.' },
     ];
-    const wsMet = XLSX.utils.json_to_sheet(metodologia);
+    const aoaMet = [[celHeader('Metodologia aplicada')]].concat(
+      metodologia.map(m => [celTexto(m['Metodologia aplicada'])])
+    );
+    const wsMet = XLSX.utils.aoa_to_sheet(aoaMet);
     wsMet['!cols'] = [{wch:110}];
     XLSX.utils.book_append_sheet(wb, wsMet, 'Metodologia');
 
